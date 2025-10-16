@@ -1,0 +1,1622 @@
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
+
+CREATE TABLE public.appointments (
+  id bigint NOT NULL DEFAULT nextval('appointments_id_seq'::regclass),
+  prospect_id uuid,
+  user_id uuid,
+  start_at timestamp with time zone NOT NULL,
+  end_at timestamp with time zone,
+  title text,
+  notes text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  status USER-DEFINED NOT NULL DEFAULT 'PLANNED'::appointment_status,
+  attended_at timestamp with time zone,
+  CONSTRAINT appointments_pkey PRIMARY KEY (id),
+  CONSTRAINT appointments_prospect_id_fkey FOREIGN KEY (prospect_id) REFERENCES public.prospects(id),
+  CONSTRAINT appointments_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.call_logs (
+  id bigint NOT NULL DEFAULT nextval('call_logs_id_seq'::regclass),
+  prospect_id uuid,
+  operator_id uuid,
+  campaign_id bigint,
+  started_at timestamp with time zone NOT NULL DEFAULT now(),
+  ended_at timestamp with time zone,
+  duration_seconds integer,
+  outcome USER-DEFINED,
+  disposition USER-DEFINED NOT NULL DEFAULT 'none'::call_disposition_enum,
+  note text,
+  next_callback_at timestamp with time zone,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT call_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT call_logs_prospect_id_fkey FOREIGN KEY (prospect_id) REFERENCES public.prospects(id),
+  CONSTRAINT call_logs_operator_id_fkey FOREIGN KEY (operator_id) REFERENCES public.profiles(id),
+  CONSTRAINT call_logs_campaign_id_fkey FOREIGN KEY (campaign_id) REFERENCES public.campaigns(id)
+);
+CREATE TABLE public.campaign_members (
+  campaign_id bigint NOT NULL,
+  user_id uuid NOT NULL,
+  CONSTRAINT campaign_members_pkey PRIMARY KEY (campaign_id, user_id),
+  CONSTRAINT campaign_members_campaign_id_fkey FOREIGN KEY (campaign_id) REFERENCES public.campaigns(id),
+  CONSTRAINT campaign_members_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.campaign_targets (
+  id bigint NOT NULL DEFAULT nextval('campaign_targets_id_seq'::regclass),
+  campaign_id bigint,
+  prospect_id uuid,
+  assigned_to uuid,
+  status text,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT campaign_targets_pkey PRIMARY KEY (id),
+  CONSTRAINT campaign_targets_campaign_id_fkey FOREIGN KEY (campaign_id) REFERENCES public.campaigns(id),
+  CONSTRAINT campaign_targets_prospect_id_fkey FOREIGN KEY (prospect_id) REFERENCES public.prospects(id),
+  CONSTRAINT campaign_targets_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.campaigns (
+  id bigint NOT NULL DEFAULT nextval('campaigns_id_seq'::regclass),
+  name text NOT NULL,
+  start_at date,
+  end_at date,
+  filter_json jsonb,
+  created_by uuid,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  status USER-DEFINED NOT NULL DEFAULT 'INACTIVE'::campaign_status_enum,
+  status_changed_at timestamp with time zone,
+  activated_at timestamp with time zone,
+  archived_at timestamp with time zone,
+  CONSTRAINT campaigns_pkey PRIMARY KEY (id),
+  CONSTRAINT campaigns_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.documents (
+  id bigint NOT NULL DEFAULT nextval('documents_id_seq'::regclass),
+  prospect_id uuid,
+  doc_type text,
+  status USER-DEFINED,
+  file_path text,
+  uploaded_by uuid,
+  uploaded_at timestamp with time zone NOT NULL DEFAULT now(),
+  requested_at timestamp with time zone,
+  received_at timestamp with time zone,
+  last_reminder_at timestamp with time zone,
+  reminder_count integer DEFAULT 0,
+  CONSTRAINT documents_pkey PRIMARY KEY (id),
+  CONSTRAINT documents_prospect_id_fkey FOREIGN KEY (prospect_id) REFERENCES public.prospects(id),
+  CONSTRAINT documents_uploaded_by_fkey FOREIGN KEY (uploaded_by) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.email_events (
+  id bigint NOT NULL DEFAULT nextval('email_events_id_seq'::regclass),
+  template_key text,
+  prospect_id uuid,
+  user_id uuid,
+  sent_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT email_events_pkey PRIMARY KEY (id),
+  CONSTRAINT email_events_template_key_fkey FOREIGN KEY (template_key) REFERENCES public.email_templates(template_key),
+  CONSTRAINT email_events_prospect_id_fkey FOREIGN KEY (prospect_id) REFERENCES public.prospects(id),
+  CONSTRAINT email_events_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.email_templates (
+  id bigint NOT NULL DEFAULT nextval('email_templates_id_seq'::regclass),
+  template_key text NOT NULL UNIQUE,
+  subject text,
+  body_md text,
+  CONSTRAINT email_templates_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.geo_city_index (
+  id bigint NOT NULL DEFAULT nextval('geo_city_index_id_seq'::regclass),
+  insee_code text NOT NULL,
+  postal_code text NOT NULL,
+  city_name text NOT NULL,
+  dept_code text NOT NULL,
+  region_name text,
+  bucket USER-DEFINED,
+  city_norm text,
+  CONSTRAINT geo_city_index_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.list_batches (
+  id bigint NOT NULL DEFAULT nextval('list_batches_id_seq'::regclass),
+  label text NOT NULL,
+  obtained_on date,
+  source USER-DEFINED,
+  size_hint integer,
+  created_by uuid,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  is_public boolean NOT NULL DEFAULT true,
+  CONSTRAINT list_batches_pkey PRIMARY KEY (id),
+  CONSTRAINT list_batches_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.opportunity_milestones (
+  prospect_id uuid NOT NULL,
+  docs_requested_at timestamp with time zone,
+  docs_first_received_at timestamp with time zone,
+  docs_completed_at timestamp with time zone,
+  quote_sent_at timestamp with time zone,
+  quote_signed_at timestamp with time zone,
+  last_reminder_at timestamp with time zone,
+  reminder_count integer DEFAULT 0,
+  CONSTRAINT opportunity_milestones_pkey PRIMARY KEY (prospect_id),
+  CONSTRAINT opportunity_milestones_prospect_id_fkey FOREIGN KEY (prospect_id) REFERENCES public.prospects(id)
+);
+CREATE TABLE public.profiles (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  first_name text,
+  last_name text,
+  username text,
+  email text,
+  role USER-DEFINED NOT NULL DEFAULT 'operator'::app_role,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT profiles_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.prospect_stage_history (
+  id bigint NOT NULL DEFAULT nextval('prospect_stage_history_id_seq'::regclass),
+  prospect_id uuid,
+  from_stage USER-DEFINED,
+  to_stage USER-DEFINED,
+  changed_at timestamp with time zone NOT NULL DEFAULT now(),
+  changed_by uuid,
+  note text,
+  CONSTRAINT prospect_stage_history_pkey PRIMARY KEY (id),
+  CONSTRAINT prospect_stage_history_prospect_id_fkey FOREIGN KEY (prospect_id) REFERENCES public.prospects(id),
+  CONSTRAINT prospect_stage_history_changed_by_fkey FOREIGN KEY (changed_by) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.prospects (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  list_batch_id bigint,
+  first_name text,
+  last_name text,
+  civility USER-DEFINED,
+  birth_date date,
+  address1 text,
+  address2 text,
+  postal_code text,
+  city text,
+  email text,
+  phone_e164 text CHECK (phone_e164 IS NULL OR phone_e164 ~ '^\+33\d{9}$'::text),
+  net_salary numeric,
+  co_borrower boolean,
+  co_net_salary numeric,
+  comments text,
+  annexes text,
+  annexes_private boolean NOT NULL DEFAULT false,
+  annexes_lock_owner_id uuid,
+  call_count integer NOT NULL DEFAULT 0,
+  last_call_at timestamp with time zone,
+  source USER-DEFINED,
+  owner_id uuid,
+  stage USER-DEFINED NOT NULL DEFAULT 'PHONING'::stage_enum,
+  stage_changed_at timestamp with time zone,
+  archived_at timestamp with time zone,
+  ko_reason text,
+  phoning_disposition USER-DEFINED,
+  docs_status USER-DEFINED,
+  validation_step USER-DEFINED,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  phoning_failed_attempts_count integer NOT NULL DEFAULT 0,
+  phoning_last_failed_at timestamp with time zone,
+  phoning_last_failed_code USER-DEFINED,
+  employment_status USER-DEFINED,
+  housing_status USER-DEFINED,
+  geo_zone USER-DEFINED,
+  CONSTRAINT prospects_pkey PRIMARY KEY (id),
+  CONSTRAINT prospects_list_batch_id_fkey FOREIGN KEY (list_batch_id) REFERENCES public.list_batches(id),
+  CONSTRAINT prospects_annexes_lock_owner_id_fkey FOREIGN KEY (annexes_lock_owner_id) REFERENCES public.profiles(id),
+  CONSTRAINT prospects_owner_id_fkey FOREIGN KEY (owner_id) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.staging_raw_prospects (
+  batch_label text,
+  first_name text,
+  last_name text,
+  phone text,
+  email text,
+  civility text,
+  birth_date text,
+  address1 text,
+  address2 text,
+  postal_code text,
+  city text,
+  net_salary text,
+  co_borrower text,
+  co_net_salary text,
+  comments text,
+  annexes text,
+  annexes_private text,
+  source text,
+  employment_status USER-DEFINED,
+  housing_status USER-DEFINED,
+  city_norm text
+);
+CREATE TABLE public.validation_steps (
+  id bigint NOT NULL DEFAULT nextval('validation_steps_id_seq'::regclass),
+  prospect_id uuid,
+  step USER-DEFINED NOT NULL,
+  done_at timestamp with time zone NOT NULL DEFAULT now(),
+  in_progress boolean DEFAULT false,
+  note text,
+  CONSTRAINT validation_steps_pkey PRIMARY KEY (id),
+  CONSTRAINT validation_steps_prospect_id_fkey FOREIGN KEY (prospect_id) REFERENCES public.prospects(id)
+);
+
+[
+  {
+    "schema": "auth",
+    "enum_name": "aal_level",
+    "enum_value": "aal1",
+    "enumsortorder": 1
+  },
+  {
+    "schema": "auth",
+    "enum_name": "aal_level",
+    "enum_value": "aal2",
+    "enumsortorder": 2
+  },
+  {
+    "schema": "auth",
+    "enum_name": "aal_level",
+    "enum_value": "aal3",
+    "enumsortorder": 3
+  },
+  {
+    "schema": "auth",
+    "enum_name": "code_challenge_method",
+    "enum_value": "s256",
+    "enumsortorder": 1
+  },
+  {
+    "schema": "auth",
+    "enum_name": "code_challenge_method",
+    "enum_value": "plain",
+    "enumsortorder": 2
+  },
+  {
+    "schema": "auth",
+    "enum_name": "factor_status",
+    "enum_value": "unverified",
+    "enumsortorder": 1
+  },
+  {
+    "schema": "auth",
+    "enum_name": "factor_status",
+    "enum_value": "verified",
+    "enumsortorder": 2
+  },
+  {
+    "schema": "auth",
+    "enum_name": "factor_type",
+    "enum_value": "totp",
+    "enumsortorder": 1
+  },
+  {
+    "schema": "auth",
+    "enum_name": "factor_type",
+    "enum_value": "webauthn",
+    "enumsortorder": 2
+  },
+  {
+    "schema": "auth",
+    "enum_name": "factor_type",
+    "enum_value": "phone",
+    "enumsortorder": 3
+  },
+  {
+    "schema": "auth",
+    "enum_name": "oauth_authorization_status",
+    "enum_value": "pending",
+    "enumsortorder": 1
+  },
+  {
+    "schema": "auth",
+    "enum_name": "oauth_authorization_status",
+    "enum_value": "approved",
+    "enumsortorder": 2
+  },
+  {
+    "schema": "auth",
+    "enum_name": "oauth_authorization_status",
+    "enum_value": "denied",
+    "enumsortorder": 3
+  },
+  {
+    "schema": "auth",
+    "enum_name": "oauth_authorization_status",
+    "enum_value": "expired",
+    "enumsortorder": 4
+  },
+  {
+    "schema": "auth",
+    "enum_name": "oauth_client_type",
+    "enum_value": "public",
+    "enumsortorder": 1
+  },
+  {
+    "schema": "auth",
+    "enum_name": "oauth_client_type",
+    "enum_value": "confidential",
+    "enumsortorder": 2
+  },
+  {
+    "schema": "auth",
+    "enum_name": "oauth_registration_type",
+    "enum_value": "dynamic",
+    "enumsortorder": 1
+  },
+  {
+    "schema": "auth",
+    "enum_name": "oauth_registration_type",
+    "enum_value": "manual",
+    "enumsortorder": 2
+  },
+  {
+    "schema": "auth",
+    "enum_name": "oauth_response_type",
+    "enum_value": "code",
+    "enumsortorder": 1
+  },
+  {
+    "schema": "auth",
+    "enum_name": "one_time_token_type",
+    "enum_value": "confirmation_token",
+    "enumsortorder": 1
+  },
+  {
+    "schema": "auth",
+    "enum_name": "one_time_token_type",
+    "enum_value": "reauthentication_token",
+    "enumsortorder": 2
+  },
+  {
+    "schema": "auth",
+    "enum_name": "one_time_token_type",
+    "enum_value": "recovery_token",
+    "enumsortorder": 3
+  },
+  {
+    "schema": "auth",
+    "enum_name": "one_time_token_type",
+    "enum_value": "email_change_token_new",
+    "enumsortorder": 4
+  },
+  {
+    "schema": "auth",
+    "enum_name": "one_time_token_type",
+    "enum_value": "email_change_token_current",
+    "enumsortorder": 5
+  },
+  {
+    "schema": "auth",
+    "enum_name": "one_time_token_type",
+    "enum_value": "phone_change_token",
+    "enumsortorder": 6
+  },
+  {
+    "schema": "public",
+    "enum_name": "app_role",
+    "enum_value": "admin",
+    "enumsortorder": 1
+  },
+  {
+    "schema": "public",
+    "enum_name": "app_role",
+    "enum_value": "manager",
+    "enumsortorder": 2
+  },
+  {
+    "schema": "public",
+    "enum_name": "app_role",
+    "enum_value": "operator",
+    "enumsortorder": 3
+  },
+  {
+    "schema": "public",
+    "enum_name": "appointment_status",
+    "enum_value": "PLANNED",
+    "enumsortorder": 1
+  },
+  {
+    "schema": "public",
+    "enum_name": "appointment_status",
+    "enum_value": "DONE",
+    "enumsortorder": 2
+  },
+  {
+    "schema": "public",
+    "enum_name": "appointment_status",
+    "enum_value": "NO_SHOW",
+    "enumsortorder": 3
+  },
+  {
+    "schema": "public",
+    "enum_name": "appointment_status",
+    "enum_value": "CANCELED",
+    "enumsortorder": 4
+  },
+  {
+    "schema": "public",
+    "enum_name": "call_disposition_enum",
+    "enum_value": "none",
+    "enumsortorder": 1
+  },
+  {
+    "schema": "public",
+    "enum_name": "call_disposition_enum",
+    "enum_value": "appointment_set",
+    "enumsortorder": 2
+  },
+  {
+    "schema": "public",
+    "enum_name": "call_disposition_enum",
+    "enum_value": "callback",
+    "enumsortorder": 3
+  },
+  {
+    "schema": "public",
+    "enum_name": "call_disposition_enum",
+    "enum_value": "ko",
+    "enumsortorder": 4
+  },
+  {
+    "schema": "public",
+    "enum_name": "call_outcome_enum",
+    "enum_value": "answered",
+    "enumsortorder": 1
+  },
+  {
+    "schema": "public",
+    "enum_name": "call_outcome_enum",
+    "enum_value": "no_answer",
+    "enumsortorder": 2
+  },
+  {
+    "schema": "public",
+    "enum_name": "call_outcome_enum",
+    "enum_value": "voicemail",
+    "enumsortorder": 3
+  },
+  {
+    "schema": "public",
+    "enum_name": "call_outcome_enum",
+    "enum_value": "busy",
+    "enumsortorder": 4
+  },
+  {
+    "schema": "public",
+    "enum_name": "call_outcome_enum",
+    "enum_value": "wrong_number",
+    "enumsortorder": 5
+  },
+  {
+    "schema": "public",
+    "enum_name": "call_outcome_enum",
+    "enum_value": "not_interested",
+    "enumsortorder": 6
+  },
+  {
+    "schema": "public",
+    "enum_name": "call_outcome_enum",
+    "enum_value": "unknown",
+    "enumsortorder": 7
+  },
+  {
+    "schema": "public",
+    "enum_name": "campaign_status_enum",
+    "enum_value": "INACTIVE",
+    "enumsortorder": 1
+  },
+  {
+    "schema": "public",
+    "enum_name": "campaign_status_enum",
+    "enum_value": "ACTIVE",
+    "enumsortorder": 2
+  },
+  {
+    "schema": "public",
+    "enum_name": "campaign_status_enum",
+    "enum_value": "ARCHIVED",
+    "enumsortorder": 3
+  },
+  {
+    "schema": "public",
+    "enum_name": "campaign_status_enum",
+    "enum_value": "PAUSED",
+    "enumsortorder": 4
+  },
+  {
+    "schema": "public",
+    "enum_name": "civility_enum",
+    "enum_value": "M.",
+    "enumsortorder": 1
+  },
+  {
+    "schema": "public",
+    "enum_name": "civility_enum",
+    "enum_value": "Mme",
+    "enumsortorder": 2
+  },
+  {
+    "schema": "public",
+    "enum_name": "civility_enum",
+    "enum_value": "Mlle",
+    "enumsortorder": 3
+  },
+  {
+    "schema": "public",
+    "enum_name": "doc_item_status",
+    "enum_value": "REQUESTED",
+    "enumsortorder": 1
+  },
+  {
+    "schema": "public",
+    "enum_name": "doc_item_status",
+    "enum_value": "PENDING",
+    "enumsortorder": 2
+  },
+  {
+    "schema": "public",
+    "enum_name": "doc_item_status",
+    "enum_value": "INCOMPLETE",
+    "enumsortorder": 3
+  },
+  {
+    "schema": "public",
+    "enum_name": "doc_item_status",
+    "enum_value": "RECEIVED",
+    "enumsortorder": 4
+  },
+  {
+    "schema": "public",
+    "enum_name": "doc_item_status",
+    "enum_value": "NOT_REQUIRED",
+    "enumsortorder": 5
+  },
+  {
+    "schema": "public",
+    "enum_name": "docs_status_enum",
+    "enum_value": "PENDING",
+    "enumsortorder": 1
+  },
+  {
+    "schema": "public",
+    "enum_name": "docs_status_enum",
+    "enum_value": "INCOMPLETE",
+    "enumsortorder": 2
+  },
+  {
+    "schema": "public",
+    "enum_name": "docs_status_enum",
+    "enum_value": "COMPLETE",
+    "enumsortorder": 3
+  },
+  {
+    "schema": "public",
+    "enum_name": "employment_status_enum",
+    "enum_value": "FONCTIONNAIRE",
+    "enumsortorder": 1
+  },
+  {
+    "schema": "public",
+    "enum_name": "employment_status_enum",
+    "enum_value": "INDEPENDANT",
+    "enumsortorder": 2
+  },
+  {
+    "schema": "public",
+    "enum_name": "employment_status_enum",
+    "enum_value": "SALA_PRIVE",
+    "enumsortorder": 3
+  },
+  {
+    "schema": "public",
+    "enum_name": "employment_status_enum",
+    "enum_value": "RETRAITE",
+    "enumsortorder": 4
+  },
+  {
+    "schema": "public",
+    "enum_name": "geo_zone_enum",
+    "enum_value": "IDF",
+    "enumsortorder": 1
+  },
+  {
+    "schema": "public",
+    "enum_name": "geo_zone_enum",
+    "enum_value": "PROVINCE",
+    "enumsortorder": 2
+  },
+  {
+    "schema": "public",
+    "enum_name": "geo_zone_enum",
+    "enum_value": "DROMCOM",
+    "enumsortorder": 3
+  },
+  {
+    "schema": "public",
+    "enum_name": "geo_zone_enum",
+    "enum_value": "UNKNOWN",
+    "enumsortorder": 4
+  },
+  {
+    "schema": "public",
+    "enum_name": "housing_status_enum",
+    "enum_value": "LOCATAIRE",
+    "enumsortorder": 1
+  },
+  {
+    "schema": "public",
+    "enum_name": "housing_status_enum",
+    "enum_value": "PROPRIETAIRE",
+    "enumsortorder": 2
+  },
+  {
+    "schema": "public",
+    "enum_name": "housing_status_enum",
+    "enum_value": "HEBERGE",
+    "enumsortorder": 3
+  },
+  {
+    "schema": "public",
+    "enum_name": "phoning_disposition_enum",
+    "enum_value": "A_RAPPELER",
+    "enumsortorder": 1
+  },
+  {
+    "schema": "public",
+    "enum_name": "phoning_disposition_enum",
+    "enum_value": "REFUS",
+    "enumsortorder": 2
+  },
+  {
+    "schema": "public",
+    "enum_name": "phoning_disposition_enum",
+    "enum_value": "MAUVAISE_COMM",
+    "enumsortorder": 3
+  },
+  {
+    "schema": "public",
+    "enum_name": "phoning_disposition_enum",
+    "enum_value": "NRP",
+    "enumsortorder": 4
+  },
+  {
+    "schema": "public",
+    "enum_name": "phoning_disposition_enum",
+    "enum_value": "REPONDEUR",
+    "enumsortorder": 5
+  },
+  {
+    "schema": "public",
+    "enum_name": "phoning_disposition_enum",
+    "enum_value": "INTERESSE",
+    "enumsortorder": 6
+  },
+  {
+    "schema": "public",
+    "enum_name": "phoning_disposition_enum",
+    "enum_value": "KO",
+    "enumsortorder": 7
+  },
+  {
+    "schema": "public",
+    "enum_name": "source_enum",
+    "enum_value": "PARRAINAGE",
+    "enumsortorder": 1
+  },
+  {
+    "schema": "public",
+    "enum_name": "source_enum",
+    "enum_value": "LEAD",
+    "enumsortorder": 2
+  },
+  {
+    "schema": "public",
+    "enum_name": "source_enum",
+    "enum_value": "LISTE_ACHETEE",
+    "enumsortorder": 3
+  },
+  {
+    "schema": "public",
+    "enum_name": "stage_enum",
+    "enum_value": "PHONING",
+    "enumsortorder": 1
+  },
+  {
+    "schema": "public",
+    "enum_name": "stage_enum",
+    "enum_value": "OPPORTUNITY",
+    "enumsortorder": 2
+  },
+  {
+    "schema": "public",
+    "enum_name": "stage_enum",
+    "enum_value": "VALIDATION",
+    "enumsortorder": 3
+  },
+  {
+    "schema": "public",
+    "enum_name": "stage_enum",
+    "enum_value": "CONTRACT",
+    "enumsortorder": 4
+  },
+  {
+    "schema": "public",
+    "enum_name": "stage_enum",
+    "enum_value": "ARCHIVED",
+    "enumsortorder": 5
+  },
+  {
+    "schema": "public",
+    "enum_name": "validation_step_enum",
+    "enum_value": "ADHESION_COMPTE_OK",
+    "enumsortorder": 1
+  },
+  {
+    "schema": "public",
+    "enum_name": "validation_step_enum",
+    "enum_value": "ADHESION_REMPLIE",
+    "enumsortorder": 2
+  },
+  {
+    "schema": "public",
+    "enum_name": "validation_step_enum",
+    "enum_value": "BPA_EDITE",
+    "enumsortorder": 3
+  },
+  {
+    "schema": "public",
+    "enum_name": "validation_step_enum",
+    "enum_value": "BPA_SIGNE",
+    "enumsortorder": 4
+  },
+  {
+    "schema": "public",
+    "enum_name": "validation_step_enum",
+    "enum_value": "DOSSIER_ENVOYE_BANQUE",
+    "enumsortorder": 5
+  },
+  {
+    "schema": "public",
+    "enum_name": "validation_step_enum",
+    "enum_value": "BANQUE_OK_AVENANT_EDITE",
+    "enumsortorder": 6
+  },
+  {
+    "schema": "public",
+    "enum_name": "validation_step_enum",
+    "enum_value": "AVENANT_SIGNE",
+    "enumsortorder": 7
+  },
+  {
+    "schema": "public",
+    "enum_name": "validation_step_enum",
+    "enum_value": "EFFET_CONTRAT",
+    "enumsortorder": 8
+  },
+  {
+    "schema": "public",
+    "enum_name": "validation_step_enum",
+    "enum_value": "INFOS_COMPLEMENTAIRES",
+    "enumsortorder": 9
+  },
+  {
+    "schema": "public",
+    "enum_name": "validation_step_enum",
+    "enum_value": "ETAPE_MEDICALE",
+    "enumsortorder": 10
+  },
+  {
+    "schema": "public",
+    "enum_name": "validation_step_enum",
+    "enum_value": "MODIF_BANQUE_DEMANDEE",
+    "enumsortorder": 11
+  },
+  {
+    "schema": "public",
+    "enum_name": "validation_step_enum",
+    "enum_value": "MODIF_BANQUE_VALIDEE",
+    "enumsortorder": 12
+  },
+  {
+    "schema": "public",
+    "enum_name": "validation_step_enum",
+    "enum_value": "DOSSIER_RENVOYE_BANQUE_APRES_MODIF",
+    "enumsortorder": 13
+  },
+  {
+    "schema": "public",
+    "enum_name": "validation_step_enum",
+    "enum_value": "DELEGATION_ANCIEN_ASSUREUR",
+    "enumsortorder": 14
+  },
+  {
+    "schema": "realtime",
+    "enum_name": "action",
+    "enum_value": "INSERT",
+    "enumsortorder": 1
+  },
+  {
+    "schema": "realtime",
+    "enum_name": "action",
+    "enum_value": "UPDATE",
+    "enumsortorder": 2
+  }
+]
+
+[
+  {
+    "schema": "public",
+    "trigger_function": "_set_city_norm_from_name",
+    "definition": "CREATE OR REPLACE FUNCTION public._set_city_norm_from_name()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nbegin\n  new.city_norm := lower(regexp_replace(unaccent(coalesce(new.city_name,'')),'[^a-z0-9]','','g'));\n  return new;\nend$function$\n"
+  },
+  {
+    "schema": "public",
+    "trigger_function": "bump_failed_attempts_from_call",
+    "definition": "CREATE OR REPLACE FUNCTION public.bump_failed_attempts_from_call()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\ndeclare code phoning_disposition_enum; ts timestamptz;\nbegin\n  ts := coalesce(new.ended_at, new.started_at, now());\n\n  if new.outcome = 'answered' then\n    update public.prospects p\n       set phoning_failed_attempts_count = 0\n     where p.id = new.prospect_id;\n    return new;\n  end if;\n\n  code := public.map_outcome_to_failed_code(new.outcome);\n\n  if code is not null then\n    update public.prospects p\n       set phoning_failed_attempts_count = p.phoning_failed_attempts_count + 1,\n           phoning_last_failed_at       = ts,\n           phoning_last_failed_code     = code\n     where p.id = new.prospect_id\n       and p.stage = 'PHONING';\n  end if;\n  return new;\nend $function$\n"
+  },
+  {
+    "schema": "public",
+    "trigger_function": "handle_new_user",
+    "definition": "CREATE OR REPLACE FUNCTION public.handle_new_user()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public', 'auth'\nAS $function$\ndeclare\n  v_first text := nullif(new.raw_user_meta_data->>'first_name','');\n  v_last  text := nullif(new.raw_user_meta_data->>'last_name','');\n  v_user  text := coalesce(\n                   nullif(new.raw_user_meta_data->>'username',''),\n                   split_part(lower(new.email),'@',1)\n                 );\nbegin\n  insert into public.profiles (id, first_name, last_name, username, email, role, created_at)\n  values (new.id, v_first, v_last, v_user, new.email, 'operator', now())\n  on conflict (id) do nothing;\n  return new;\nend;\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "trigger_function": "log_stage_change",
+    "definition": "CREATE OR REPLACE FUNCTION public.log_stage_change()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nbegin\n  if new.stage is distinct from old.stage then\n    new.stage_changed_at := now();\n    insert into public.prospect_stage_history\n      (prospect_id, from_stage, to_stage, changed_at, changed_by, note)\n    values (old.id, old.stage, new.stage, now(), auth.uid(), null);\n  end if;\n  return new;\nend $function$\n"
+  },
+  {
+    "schema": "public",
+    "trigger_function": "prevent_phoning_disposition_reset",
+    "definition": "CREATE OR REPLACE FUNCTION public.prevent_phoning_disposition_reset()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nbegin\n  if old.phoning_disposition is not null and new.phoning_disposition is null then\n    raise exception 'Impossible de remettre le statut phoning à NULL (Nouveau lead) une fois défini.';\n  end if;\n  return new;\nend $function$\n"
+  },
+  {
+    "schema": "public",
+    "trigger_function": "set_call_duration",
+    "definition": "CREATE OR REPLACE FUNCTION public.set_call_duration()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nbegin\n  if new.ended_at is not null then\n    new.duration_seconds := greatest(0, extract(epoch from (new.ended_at - new.started_at)))::int;\n  end if;\n  return new;\nend $function$\n"
+  },
+  {
+    "schema": "public",
+    "trigger_function": "set_updated_at",
+    "definition": "CREATE OR REPLACE FUNCTION public.set_updated_at()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nbegin\n  new.updated_at := now();\n  return new;\nend $function$\n"
+  },
+  {
+    "schema": "public",
+    "trigger_function": "trg_campaigns_apply_meta_from_filter_json",
+    "definition": "CREATE OR REPLACE FUNCTION public.trg_campaigns_apply_meta_from_filter_json()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\ndeclare\n  v_meta   jsonb;\n  v_status public.campaign_status_enum;\n  v_start  date;\n  v_end    date;\nbegin\n  if NEW.filter_json is null then\n    return NEW;\n  end if;\n\n  v_meta := NEW.filter_json->'meta';\n  if v_meta is null then\n    return NEW;\n  end if;\n\n  -- Status: only allow INACTIVE / ACTIVE at creation time.\n  if (v_meta ? 'status') then\n    begin\n      v_status := (v_meta->>'status')::public.campaign_status_enum;\n      if v_status in ('INACTIVE','ACTIVE') then\n        NEW.status := v_status;\n      end if;\n    exception when others then\n      -- ignore invalid value\n      null;\n    end;\n  end if;\n\n  -- start_at (optional)\n  if (v_meta ? 'start_at') then\n    begin\n      v_start := (v_meta->>'start_at')::date;\n      NEW.start_at := v_start;\n    exception when others then\n      -- ignore parse error\n      null;\n    end;\n  end if;\n\n  -- end_at (optional)\n  if (v_meta ? 'end_at') then\n    begin\n      v_end := (v_meta->>'end_at')::date;\n      NEW.end_at := v_end;\n    exception when others then\n      -- ignore parse error\n      null;\n    end;\n  end if;\n\n  return NEW;\nend\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "trigger_function": "trg_campaigns_lock_when_archived",
+    "definition": "CREATE OR REPLACE FUNCTION public.trg_campaigns_lock_when_archived()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n  v_is_admin_or_service boolean;\nBEGIN\n  v_is_admin_or_service := COALESCE(public._is_admin_or_service(), false);\n\n  IF OLD.status = 'ARCHIVED' AND NOT v_is_admin_or_service THEN\n    IF (NEW.* IS DISTINCT FROM OLD.*) THEN\n      RAISE EXCEPTION 'Cette campagne est archivée et ne peut plus être modifiée.' USING ERRCODE = 'P0001';\n    END IF;\n  END IF;\n\n  IF OLD.status = 'ARCHIVED' AND NEW.status IS DISTINCT FROM OLD.status AND NOT v_is_admin_or_service THEN\n    RAISE EXCEPTION 'Impossible de désarchiver une campagne (% -> %).', OLD.status, NEW.status USING ERRCODE = 'P0001';\n  END IF;\n\n  RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "trigger_function": "trg_campaigns_status_audit",
+    "definition": "CREATE OR REPLACE FUNCTION public.trg_campaigns_status_audit()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  IF TG_OP = 'INSERT' THEN\n    IF NEW.status_changed_at IS NULL THEN\n      NEW.status_changed_at := now();\n    END IF;\n\n    IF NEW.status = 'ACTIVE' AND NEW.activated_at IS NULL THEN\n      NEW.activated_at := now();\n    END IF;\n\n    IF NEW.status = 'ARCHIVED' AND NEW.archived_at IS NULL THEN\n      NEW.archived_at := now();\n    END IF;\n\n    RETURN NEW;\n  END IF;\n\n  IF NEW.status IS DISTINCT FROM OLD.status THEN\n    NEW.status_changed_at := now();\n\n    IF NEW.status = 'ACTIVE' AND NEW.activated_at IS NULL THEN\n      NEW.activated_at := now();\n    END IF;\n\n    IF NEW.status = 'ARCHIVED' AND NEW.archived_at IS NULL THEN\n      NEW.archived_at := now();\n    END IF;\n  END IF;\n\n  RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "trigger_function": "trg_documents_after_change",
+    "definition": "CREATE OR REPLACE FUNCTION public.trg_documents_after_change()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\ndeclare pid uuid;\nbegin\n  pid := coalesce(new.prospect_id, old.prospect_id);\n  perform public.recompute_docs_status(pid);\n  return coalesce(new, old);\nend $function$\n"
+  },
+  {
+    "schema": "public",
+    "trigger_function": "trg_prospect_geo_zone",
+    "definition": "CREATE OR REPLACE FUNCTION public.trg_prospect_geo_zone()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nbegin\n  if new.postal_code is distinct from coalesce(old.postal_code,'__NULL__') then\n    new.geo_zone := public.classify_geo_zone(new.postal_code);\n  elsif new.geo_zone is null then\n    new.geo_zone := public.classify_geo_zone(new.postal_code);\n  end if;\n  return new;\nend $function$\n"
+  },
+  {
+    "schema": "public",
+    "trigger_function": "trg_prospects_normalize_phone",
+    "definition": "CREATE OR REPLACE FUNCTION public.trg_prospects_normalize_phone()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nbegin\n  if new.phone_e164 is not null then\n    new.phone_e164 := public.normalize_fr_phone(new.phone_e164);\n  end if;\n  return new;\nend\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "trigger_function": "trg_set_city_norm",
+    "definition": "CREATE OR REPLACE FUNCTION public.trg_set_city_norm()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nbegin\n  new.city_norm := public.normalize_city_text(new.city);\n  return new;\nend$function$\n"
+  },
+  {
+    "schema": "storage",
+    "trigger_function": "delete_prefix_hierarchy_trigger",
+    "definition": "CREATE OR REPLACE FUNCTION storage.delete_prefix_hierarchy_trigger()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n    prefix text;\nBEGIN\n    prefix := \"storage\".\"get_prefix\"(OLD.\"name\");\n\n    IF coalesce(prefix, '') != '' THEN\n        PERFORM \"storage\".\"delete_prefix\"(OLD.\"bucket_id\", prefix);\n    END IF;\n\n    RETURN OLD;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "trigger_function": "enforce_bucket_name_length",
+    "definition": "CREATE OR REPLACE FUNCTION storage.enforce_bucket_name_length()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nbegin\n    if length(new.name) > 100 then\n        raise exception 'bucket name \"%\" is too long (% characters). Max is 100.', new.name, length(new.name);\n    end if;\n    return new;\nend;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "trigger_function": "objects_delete_cleanup",
+    "definition": "CREATE OR REPLACE FUNCTION storage.objects_delete_cleanup()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\nAS $function$\nDECLARE\n    v_bucket_ids text[];\n    v_names      text[];\nBEGIN\n    IF current_setting('storage.gc.prefixes', true) = '1' THEN\n        RETURN NULL;\n    END IF;\n\n    PERFORM set_config('storage.gc.prefixes', '1', true);\n\n    SELECT COALESCE(array_agg(d.bucket_id), '{}'),\n           COALESCE(array_agg(d.name), '{}')\n    INTO v_bucket_ids, v_names\n    FROM deleted AS d\n    WHERE d.name <> '';\n\n    PERFORM storage.lock_top_prefixes(v_bucket_ids, v_names);\n    PERFORM storage.delete_leaf_prefixes(v_bucket_ids, v_names);\n\n    RETURN NULL;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "trigger_function": "objects_insert_prefix_trigger",
+    "definition": "CREATE OR REPLACE FUNCTION storage.objects_insert_prefix_trigger()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n    PERFORM \"storage\".\"add_prefixes\"(NEW.\"bucket_id\", NEW.\"name\");\n    NEW.level := \"storage\".\"get_level\"(NEW.\"name\");\n\n    RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "trigger_function": "objects_update_cleanup",
+    "definition": "CREATE OR REPLACE FUNCTION storage.objects_update_cleanup()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\nAS $function$\nDECLARE\n    -- NEW - OLD (destinations to create prefixes for)\n    v_add_bucket_ids text[];\n    v_add_names      text[];\n\n    -- OLD - NEW (sources to prune)\n    v_src_bucket_ids text[];\n    v_src_names      text[];\nBEGIN\n    IF TG_OP <> 'UPDATE' THEN\n        RETURN NULL;\n    END IF;\n\n    -- 1) Compute NEW−OLD (added paths) and OLD−NEW (moved-away paths)\n    WITH added AS (\n        SELECT n.bucket_id, n.name\n        FROM new_rows n\n        WHERE n.name <> '' AND position('/' in n.name) > 0\n        EXCEPT\n        SELECT o.bucket_id, o.name FROM old_rows o WHERE o.name <> ''\n    ),\n    moved AS (\n         SELECT o.bucket_id, o.name\n         FROM old_rows o\n         WHERE o.name <> ''\n         EXCEPT\n         SELECT n.bucket_id, n.name FROM new_rows n WHERE n.name <> ''\n    )\n    SELECT\n        -- arrays for ADDED (dest) in stable order\n        COALESCE( (SELECT array_agg(a.bucket_id ORDER BY a.bucket_id, a.name) FROM added a), '{}' ),\n        COALESCE( (SELECT array_agg(a.name      ORDER BY a.bucket_id, a.name) FROM added a), '{}' ),\n        -- arrays for MOVED (src) in stable order\n        COALESCE( (SELECT array_agg(m.bucket_id ORDER BY m.bucket_id, m.name) FROM moved m), '{}' ),\n        COALESCE( (SELECT array_agg(m.name      ORDER BY m.bucket_id, m.name) FROM moved m), '{}' )\n    INTO v_add_bucket_ids, v_add_names, v_src_bucket_ids, v_src_names;\n\n    -- Nothing to do?\n    IF (array_length(v_add_bucket_ids, 1) IS NULL) AND (array_length(v_src_bucket_ids, 1) IS NULL) THEN\n        RETURN NULL;\n    END IF;\n\n    -- 2) Take per-(bucket, top) locks: ALL prefixes in consistent global order to prevent deadlocks\n    DECLARE\n        v_all_bucket_ids text[];\n        v_all_names text[];\n    BEGIN\n        -- Combine source and destination arrays for consistent lock ordering\n        v_all_bucket_ids := COALESCE(v_src_bucket_ids, '{}') || COALESCE(v_add_bucket_ids, '{}');\n        v_all_names := COALESCE(v_src_names, '{}') || COALESCE(v_add_names, '{}');\n\n        -- Single lock call ensures consistent global ordering across all transactions\n        IF array_length(v_all_bucket_ids, 1) IS NOT NULL THEN\n            PERFORM storage.lock_top_prefixes(v_all_bucket_ids, v_all_names);\n        END IF;\n    END;\n\n    -- 3) Create destination prefixes (NEW−OLD) BEFORE pruning sources\n    IF array_length(v_add_bucket_ids, 1) IS NOT NULL THEN\n        WITH candidates AS (\n            SELECT DISTINCT t.bucket_id, unnest(storage.get_prefixes(t.name)) AS name\n            FROM unnest(v_add_bucket_ids, v_add_names) AS t(bucket_id, name)\n            WHERE name <> ''\n        )\n        INSERT INTO storage.prefixes (bucket_id, name)\n        SELECT c.bucket_id, c.name\n        FROM candidates c\n        ON CONFLICT DO NOTHING;\n    END IF;\n\n    -- 4) Prune source prefixes bottom-up for OLD−NEW\n    IF array_length(v_src_bucket_ids, 1) IS NOT NULL THEN\n        -- re-entrancy guard so DELETE on prefixes won't recurse\n        IF current_setting('storage.gc.prefixes', true) <> '1' THEN\n            PERFORM set_config('storage.gc.prefixes', '1', true);\n        END IF;\n\n        PERFORM storage.delete_leaf_prefixes(v_src_bucket_ids, v_src_names);\n    END IF;\n\n    RETURN NULL;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "trigger_function": "objects_update_level_trigger",
+    "definition": "CREATE OR REPLACE FUNCTION storage.objects_update_level_trigger()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n    -- Ensure this is an update operation and the name has changed\n    IF TG_OP = 'UPDATE' AND (NEW.\"name\" <> OLD.\"name\" OR NEW.\"bucket_id\" <> OLD.\"bucket_id\") THEN\n        -- Set the new level\n        NEW.\"level\" := \"storage\".\"get_level\"(NEW.\"name\");\n    END IF;\n    RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "trigger_function": "objects_update_prefix_trigger",
+    "definition": "CREATE OR REPLACE FUNCTION storage.objects_update_prefix_trigger()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n    old_prefixes TEXT[];\nBEGIN\n    -- Ensure this is an update operation and the name has changed\n    IF TG_OP = 'UPDATE' AND (NEW.\"name\" <> OLD.\"name\" OR NEW.\"bucket_id\" <> OLD.\"bucket_id\") THEN\n        -- Retrieve old prefixes\n        old_prefixes := \"storage\".\"get_prefixes\"(OLD.\"name\");\n\n        -- Remove old prefixes that are only used by this object\n        WITH all_prefixes as (\n            SELECT unnest(old_prefixes) as prefix\n        ),\n        can_delete_prefixes as (\n             SELECT prefix\n             FROM all_prefixes\n             WHERE NOT EXISTS (\n                 SELECT 1 FROM \"storage\".\"objects\"\n                 WHERE \"bucket_id\" = OLD.\"bucket_id\"\n                   AND \"name\" <> OLD.\"name\"\n                   AND \"name\" LIKE (prefix || '%')\n             )\n         )\n        DELETE FROM \"storage\".\"prefixes\" WHERE name IN (SELECT prefix FROM can_delete_prefixes);\n\n        -- Add new prefixes\n        PERFORM \"storage\".\"add_prefixes\"(NEW.\"bucket_id\", NEW.\"name\");\n    END IF;\n    -- Set the new level\n    NEW.\"level\" := \"storage\".\"get_level\"(NEW.\"name\");\n\n    RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "trigger_function": "prefixes_delete_cleanup",
+    "definition": "CREATE OR REPLACE FUNCTION storage.prefixes_delete_cleanup()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\nAS $function$\nDECLARE\n    v_bucket_ids text[];\n    v_names      text[];\nBEGIN\n    IF current_setting('storage.gc.prefixes', true) = '1' THEN\n        RETURN NULL;\n    END IF;\n\n    PERFORM set_config('storage.gc.prefixes', '1', true);\n\n    SELECT COALESCE(array_agg(d.bucket_id), '{}'),\n           COALESCE(array_agg(d.name), '{}')\n    INTO v_bucket_ids, v_names\n    FROM deleted AS d\n    WHERE d.name <> '';\n\n    PERFORM storage.lock_top_prefixes(v_bucket_ids, v_names);\n    PERFORM storage.delete_leaf_prefixes(v_bucket_ids, v_names);\n\n    RETURN NULL;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "trigger_function": "prefixes_insert_trigger",
+    "definition": "CREATE OR REPLACE FUNCTION storage.prefixes_insert_trigger()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n    PERFORM \"storage\".\"add_prefixes\"(NEW.\"bucket_id\", NEW.\"name\");\n    RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "trigger_function": "update_updated_at_column",
+    "definition": "CREATE OR REPLACE FUNCTION storage.update_updated_at_column()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n    NEW.updated_at = now();\n    RETURN NEW; \nEND;\n$function$\n"
+  }
+]
+
+[
+  {
+    "schema": "auth",
+    "name": "email",
+    "definition": "CREATE OR REPLACE FUNCTION auth.email()\n RETURNS text\n LANGUAGE sql\n STABLE\nAS $function$\n  select \n  coalesce(\n    nullif(current_setting('request.jwt.claim.email', true), ''),\n    (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'email')\n  )::text\n$function$\n"
+  },
+  {
+    "schema": "auth",
+    "name": "jwt",
+    "definition": "CREATE OR REPLACE FUNCTION auth.jwt()\n RETURNS jsonb\n LANGUAGE sql\n STABLE\nAS $function$\n  select \n    coalesce(\n        nullif(current_setting('request.jwt.claim', true), ''),\n        nullif(current_setting('request.jwt.claims', true), '')\n    )::jsonb\n$function$\n"
+  },
+  {
+    "schema": "auth",
+    "name": "role",
+    "definition": "CREATE OR REPLACE FUNCTION auth.role()\n RETURNS text\n LANGUAGE sql\n STABLE\nAS $function$\n  select \n  coalesce(\n    nullif(current_setting('request.jwt.claim.role', true), ''),\n    (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role')\n  )::text\n$function$\n"
+  },
+  {
+    "schema": "auth",
+    "name": "uid",
+    "definition": "CREATE OR REPLACE FUNCTION auth.uid()\n RETURNS uuid\n LANGUAGE sql\n STABLE\nAS $function$\n  select \n  coalesce(\n    nullif(current_setting('request.jwt.claim.sub', true), ''),\n    (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub')\n  )::uuid\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "_is_admin_or_service",
+    "definition": "CREATE OR REPLACE FUNCTION public._is_admin_or_service()\n RETURNS boolean\n LANGUAGE plpgsql\nAS $function$\ndeclare\n  v_role text := coalesce(current_setting('request.jwt.claim.role', true), '');\n  v_uid  uuid := auth.uid();\n  v_has_is_admin boolean;\nbegin\n  -- service key / back-end\n  if v_role = 'service_role' then\n    return true;\n  end if;\n\n  -- does public.profiles.is_admin exist in this DB?\n  select exists (\n    select 1\n    from information_schema.columns\n    where table_schema = 'public'\n      and table_name   = 'profiles'\n      and column_name  = 'is_admin'\n  ) into v_has_is_admin;\n\n  if v_has_is_admin then\n    return exists (\n      select 1 from public.profiles p\n      where p.id = v_uid and coalesce(p.is_admin, false)\n    );\n  end if;\n\n  -- no is_admin column → only service_role is allowed\n  return false;\nend\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "_set_city_norm_from_name",
+    "definition": "CREATE OR REPLACE FUNCTION public._set_city_norm_from_name()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nbegin\n  new.city_norm := lower(regexp_replace(unaccent(coalesce(new.city_name,'')),'[^a-z0-9]','','g'));\n  return new;\nend$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "appointment_close_latest",
+    "definition": "CREATE OR REPLACE FUNCTION public.appointment_close_latest(p_prospect_id uuid, p_outcome text)\n RETURNS bigint\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\ndeclare v_id bigint;\nbegin\n  if upper(p_outcome) not in ('DONE','NO_SHOW') then\n    raise exception 'Outcome invalide: % (attendu: DONE | NO_SHOW)', p_outcome;\n  end if;\n\n  update public.appointments\n     set status = upper(p_outcome)::appointment_status,\n         attended_at = case when upper(p_outcome) = 'DONE' then now() else attended_at end\n   where id = (\n     select id from public.appointments\n      where prospect_id = p_prospect_id\n        and status = 'PLANNED'\n      order by start_at desc, created_at desc\n      limit 1\n   )\n   returning id into v_id;\n\n  if v_id is null then\n    raise exception 'Aucun RDV PLANNED à clôturer pour ce prospect';\n  end if;\n\n  return v_id;\nend;\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "appointment_plan",
+    "definition": "CREATE OR REPLACE FUNCTION public.appointment_plan(p_prospect_id uuid, p_start_at timestamp with time zone, p_user_id uuid DEFAULT NULL::uuid)\n RETURNS bigint\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\ndeclare v_id bigint;\nbegin\n  insert into public.appointments (prospect_id, user_id, start_at, status)\n  values (p_prospect_id, p_user_id, p_start_at, 'PLANNED')\n  returning id into v_id;\n\n  return v_id;\nend\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "appointment_reschedule",
+    "definition": "CREATE OR REPLACE FUNCTION public.appointment_reschedule(p_appointment_id bigint, p_start_at timestamp with time zone, p_user_id uuid DEFAULT NULL::uuid)\n RETURNS bigint\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\ndeclare v_status public.appointment_status;\nbegin\n  select status into v_status from public.appointments where id = p_appointment_id;\n  if v_status is null then\n    raise exception 'RDV introuvable (%).', p_appointment_id;\n  end if;\n  if v_status <> 'PLANNED' then\n    raise exception 'Seul un RDV PLANNED peut être replanifié (id=%; status=%).', p_appointment_id, v_status;\n  end if;\n\n  update public.appointments\n     set start_at   = p_start_at,\n         user_id    = coalesce(p_user_id, user_id),\n         updated_at = now()\n   where id = p_appointment_id;\n\n  return p_appointment_id;\nend\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "armor",
+    "definition": "CREATE OR REPLACE FUNCTION public.armor(bytea)\n RETURNS text\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pg_armor$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "armor",
+    "definition": "CREATE OR REPLACE FUNCTION public.armor(bytea, text[], text[])\n RETURNS text\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pg_armor$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "bump_failed_attempts_from_call",
+    "definition": "CREATE OR REPLACE FUNCTION public.bump_failed_attempts_from_call()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\ndeclare code phoning_disposition_enum; ts timestamptz;\nbegin\n  ts := coalesce(new.ended_at, new.started_at, now());\n\n  if new.outcome = 'answered' then\n    update public.prospects p\n       set phoning_failed_attempts_count = 0\n     where p.id = new.prospect_id;\n    return new;\n  end if;\n\n  code := public.map_outcome_to_failed_code(new.outcome);\n\n  if code is not null then\n    update public.prospects p\n       set phoning_failed_attempts_count = p.phoning_failed_attempts_count + 1,\n           phoning_last_failed_at       = ts,\n           phoning_last_failed_code     = code\n     where p.id = new.prospect_id\n       and p.stage = 'PHONING';\n  end if;\n  return new;\nend $function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "campaign_create_from_filters",
+    "definition": "CREATE OR REPLACE FUNCTION public.campaign_create_from_filters(p_name text, p_batch_ids bigint[], p_geo text, p_min_salary numeric, p_max_salary numeric, p_require_email boolean, p_require_coborrower boolean, p_phoning_status text[], p_employment employment_status_enum[], p_housing housing_status_enum[], p_member_ids uuid[], p_include_employment_null boolean DEFAULT false, p_include_housing_null boolean DEFAULT false)\n RETURNS TABLE(campaign_id bigint, created_targets integer, created_members integer)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\ndeclare\n  v_campaign_id bigint;\n  v_created_targets int := 0;\n  v_created_members int := 0;\n  v_uid uuid := auth.uid();\n\n  v_member_ids uuid[] := '{}';\n  v_member_count int := 0;\n\n  v_phone_text text[] := '{}';\n  v_want_phone_null boolean := false;\nbegin\n  -- garde\n  if not (public._is_admin_or_service() or public.is_manager_or_admin()) then\n    raise exception 'not allowed';\n  end if;\n\n  -- phoning preprocess (on compare en text)\n  if p_phoning_status is not null then\n    v_want_phone_null := array_position(p_phoning_status, '__NULL__') is not null;\n    v_phone_text := array_remove(p_phoning_status, '__NULL__');\n  end if;\n\n  -- 1) campagne\n  insert into public.campaigns(name, status, created_by)\n  values (p_name, 'INACTIVE', v_uid)\n  returning id into v_campaign_id;\n\n  -- 2) membres\n  if p_member_ids is not null and array_length(p_member_ids,1) is not null then\n    insert into public.campaign_members(campaign_id, user_id)\n    select distinct v_campaign_id, u from unnest(p_member_ids) u\n    on conflict do nothing;\n    get diagnostics v_created_members = row_count;\n\n    select array_agg(distinct u order by u) into v_member_ids\n    from unnest(p_member_ids) u;\n  end if;\n  v_member_count := coalesce(array_length(v_member_ids,1),0);\n\n  -- 3) base éligible\n  with base as (\n    select p.id as prospect_id, p.owner_id\n    from public.prospects p\n    where\n      (p_batch_ids is null or array_length(p_batch_ids,1) is null or p.list_batch_id = any(p_batch_ids))\n      and (\n        p_geo is null\n        or (p_geo = 'FR_METRO' and p.geo_zone in ('IDF','PROVINCE'))\n        or (p_geo = 'IDF'      and p.geo_zone = 'IDF')\n        or (p_geo = 'PROVINCE' and p.geo_zone = 'PROVINCE')\n      )\n      and (p_min_salary is null or p.net_salary >= p_min_salary)\n      and (p_max_salary is null or p.net_salary <= p_max_salary)\n      and (\n        coalesce(p_require_email,false) = false\n        or (p.email is not null and length(trim(p.email)) > 0)\n      )\n      and (\n        p_require_coborrower is null\n        or (p_require_coborrower = true  and coalesce(p.co_borrower,false) = true)\n        or (p_require_coborrower = false and coalesce(p.co_borrower,false) = false)\n      )\n      and (\n        p_phoning_status is null\n        or (v_want_phone_null and p.phoning_disposition is null)\n        or (array_length(v_phone_text,1) is not null and p.phoning_disposition::text = any(v_phone_text))\n      )\n      and (\n        p_employment is null\n        or p.employment_status = any(p_employment)\n        or (p_include_employment_null and p.employment_status is null)\n      )\n      and (\n        p_housing is null\n        or p.housing_status = any(p_housing)\n        or (p_include_housing_null and p.housing_status is null)\n      )\n  ),\n  -- numérotation pour round-robin sur ceux SANS owner\n  numbered as (\n    select prospect_id, row_number() over (order by prospect_id) as rn\n    from base\n    where owner_id is null\n  ),\n  members as (\n    select m_id, ord::int\n    from unnest(v_member_ids) with ordinality as t(m_id, ord)\n  ),\n  dispatch as (\n    -- a) on conserve l'owner existant\n    select b.prospect_id, b.owner_id as chosen\n    from base b\n    where b.owner_id is not null\n\n    union all\n\n    -- b) on attribue un owner si possible (RR sur la liste fournie)\n    select n.prospect_id,\n           case when v_member_count > 0\n                then (select m.m_id from members m\n                      where m.ord = ((n.rn - 1) % v_member_count) + 1)\n                else null::uuid\n           end as chosen\n    from numbered n\n  )\n  -- 4) poser/miroiter l'affectation\n  , up_owner as (\n    update public.prospects p\n       set owner_id = d.chosen\n    from dispatch d\n    where p.id = d.prospect_id\n      and p.owner_id is null        -- ne jamais écraser\n      and d.chosen is not null\n    returning p.id\n  )\n  , ins_targets as (\n    insert into public.campaign_targets(campaign_id, prospect_id, assigned_to)\n    select v_campaign_id, d.prospect_id, d.chosen\n    from dispatch d\n    left join public.campaign_targets ct\n      on ct.campaign_id = v_campaign_id\n     and ct.prospect_id = d.prospect_id\n    where ct.prospect_id is null\n    returning 1\n  )\n  -- 5) synchroniser le miroir: assigned_to = owner_id\n  update public.campaign_targets ct\n     set assigned_to = p.owner_id\n  from public.prospects p\n  where ct.campaign_id = v_campaign_id\n    and ct.prospect_id = p.id\n    and (ct.assigned_to is distinct from p.owner_id);\n\n  get diagnostics v_created_targets = row_count;\n\n  return query select v_campaign_id, v_created_targets, v_created_members;\nend\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "campaign_set_status",
+    "definition": "CREATE OR REPLACE FUNCTION public.campaign_set_status(p_campaign_id bigint, p_status campaign_status_enum)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nbegin\n  if not public.is_manager_or_admin() then\n    raise exception 'Accès refusé (admin/manager requis)';\n  end if;\n  update public.campaigns\n     set status = p_status\n   where id = p_campaign_id;\nend $function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "campaign_takeover",
+    "definition": "CREATE OR REPLACE FUNCTION public.campaign_takeover(p_campaign_id bigint, p_new_owner uuid, p_cancel_future_appts boolean DEFAULT true)\n RETURNS TABLE(transferred integer, appts_canceled integer)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\ndeclare\n  v_transferred int := 0;\n  v_canceled    int := 0;\nbegin\n  if not public.is_manager_or_admin() then\n    raise exception 'Accès refusé (admin/manager requis)';\n  end if;\n\n  update public.campaign_targets\n     set assigned_to = p_new_owner\n   where campaign_id = p_campaign_id;\n  get diagnostics v_transferred = row_count;\n\n  if p_cancel_future_appts then\n    update public.appointments a\n       set status = 'CANCELED'\n     where a.status = 'PLANNED'\n       and a.prospect_id in (\n         select prospect_id\n           from public.campaign_targets\n          where campaign_id = p_campaign_id\n       );\n    get diagnostics v_canceled = row_count;\n  end if;\n\n  return query select v_transferred, v_canceled;\nend $function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "campaign_targets_sync_from_owner",
+    "definition": "CREATE OR REPLACE FUNCTION public.campaign_targets_sync_from_owner(p_campaign_id bigint, p_member_ids uuid[] DEFAULT NULL::uuid[], p_mirror_only boolean DEFAULT false)\n RETURNS integer\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\ndeclare\n  v_assigned int := 0;\n  v_members uuid[] := coalesce(p_member_ids, '{}');\n  v_mcnt int := coalesce(array_length(v_members,1), 0);\nbegin\n  -- ✅ Guard: allow service/admin at runtime, and also allow when auth.uid() is NULL (migrations)\n  if not (public._is_admin_or_service() or public.is_manager_or_admin() or auth.uid() is null) then\n    raise exception 'not allowed';\n  end if;\n\n  -- 1) Mirror owner_id -> campaign_targets.assigned_to (update existants)\n  update public.campaign_targets ct\n     set assigned_to = p.owner_id\n    from public.prospects p\n   where ct.campaign_id = p_campaign_id\n     and ct.prospect_id = p.id\n     and coalesce(ct.assigned_to,'00000000-0000-0000-0000-000000000000'::uuid) is distinct from p.owner_id;\n\n  -- 2) Si on ne veut QUE mirrorer, on s'arrête ici\n  if p_mirror_only then\n    get diagnostics v_assigned = row_count;\n    return v_assigned;\n  end if;\n\n  -- 3) Pour les cibles de la campagne qui n'ont PAS d'owner_id,\n  --    si on a des membres, on fait un round-robin et on pousse dans prospects.owner_id\n  if v_mcnt > 0 then\n    with without_owner as (\n      select ct.prospect_id,\n             row_number() over (order by ct.id) as rn\n        from public.campaign_targets ct\n        join public.prospects p on p.id = ct.prospect_id\n       where ct.campaign_id = p_campaign_id\n         and p.owner_id is null\n    ), members as (\n      select m_id, ord::int\n        from unnest(v_members) with ordinality as t(m_id, ord)\n    ), rr as (\n      select w.prospect_id,\n             (select m.m_id\n                from members m\n               where m.ord = ((w.rn - 1) % v_mcnt) + 1) as new_owner\n        from without_owner w\n    )\n    update public.prospects p\n       set owner_id = rr.new_owner\n      from rr\n     where p.id = rr.prospect_id\n       and p.owner_id is null;\n\n    -- 4) Re-mirror vers campaign_targets.assigned_to (pour ces lignes)\n    update public.campaign_targets ct\n       set assigned_to = p.owner_id\n      from public.prospects p\n     where ct.campaign_id = p_campaign_id\n       and ct.prospect_id = p.id\n       and ct.assigned_to is distinct from p.owner_id;\n  end if;\n\n  -- Combien ont une assignation après sync ?\n  select count(*)\n    into v_assigned\n    from public.campaign_targets ct\n    where ct.campaign_id = p_campaign_id\n      and ct.assigned_to is not null;\n\n  return v_assigned;\nend\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "campaign_transfer_targets",
+    "definition": "CREATE OR REPLACE FUNCTION public.campaign_transfer_targets(p_campaign_id bigint, p_from uuid, p_to uuid, p_cancel_future_appts boolean DEFAULT true)\n RETURNS TABLE(transferred integer, appts_canceled integer)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\ndeclare\n  v_transferred int := 0;\n  v_canceled    int := 0;\nbegin\n  if not public.is_manager_or_admin() then\n    raise exception 'Accès refusé (admin/manager requis)';\n  end if;\n\n  -- 1) Transfert global d’ownership (prospects.owner_id)\n  update public.prospects p\n     set owner_id = p_to\n   where p.owner_id = p_from\n     and exists (\n       select 1\n         from public.campaign_targets ct\n        where ct.campaign_id = p_campaign_id\n          and ct.prospect_id = p.id\n     );\n\n  -- 2) Miroir sur campaign_targets\n  update public.campaign_targets t\n     set assigned_to = p_to\n   where t.campaign_id = p_campaign_id\n     and t.assigned_to = p_from;\n  get diagnostics v_transferred = row_count;\n\n  -- 3) Annule les RDV futurs de l’opérateur remplacé si demandé\n  if p_cancel_future_appts then\n    update public.appointments a\n       set status = 'CANCELED'\n     where a.status = 'PLANNED'\n       and a.user_id = p_from\n       and a.prospect_id in (\n         select prospect_id\n           from public.campaign_targets\n          where campaign_id = p_campaign_id\n       );\n    get diagnostics v_canceled = row_count;\n  end if;\n\n  return query select v_transferred, v_canceled;\nend\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "can_read_campaign",
+    "definition": "CREATE OR REPLACE FUNCTION public.can_read_campaign(p_campaign_id bigint)\n RETURNS boolean\n LANGUAGE sql\n STABLE\nAS $function$\n  select\n    public.is_manager_or_admin()\n    or exists (\n      select 1 from public.campaign_members cm\n      where cm.campaign_id = p_campaign_id\n        and cm.user_id = auth.uid()\n    )\n    or exists (\n      select 1 from public.campaign_targets ct\n      where ct.campaign_id = p_campaign_id\n        and ct.assigned_to = auth.uid()\n    );\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "classify_geo_zone",
+    "definition": "CREATE OR REPLACE FUNCTION public.classify_geo_zone(p_cp text)\n RETURNS geo_zone_enum\n LANGUAGE plpgsql\n IMMUTABLE\nAS $function$\ndeclare dept text;\nbegin\n  if p_cp is null or p_cp !~ '^\\d{5}$' then\n    return 'UNKNOWN';\n  end if;\n\n  if left(p_cp,2) = '97' then\n    return 'DROMCOM';\n  end if;\n\n  dept := left(p_cp,2);\n  if dept in ('75','77','78','91','92','93','94','95') then\n    return 'IDF';\n  end if;\n\n  return 'PROVINCE';\nend $function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "compute_geo_zone",
+    "definition": "CREATE OR REPLACE FUNCTION public.compute_geo_zone(postal_code text, city_norm text)\n RETURNS geo_zone_enum\n LANGUAGE plpgsql\n STABLE\nAS $function$\ndeclare dept text; z public.geo_zone_enum;\nbegin\n  if postal_code ~ '^\\d{5}$' then\n    dept := substr(postal_code,1,2);\n    if dept in ('75','77','78','91','92','93','94','95') then\n      return 'IDF'::public.geo_zone_enum;\n    else\n      return 'PROVINCE'::public.geo_zone_enum;\n    end if;\n  end if;\n\n  if city_norm is not null and city_norm <> '' then\n    select g.bucket into z\n      from public.geo_city_index g\n     where g.city_norm = city_norm\n     order by g.id\n     limit 1;\n    if z is not null then return z; end if;\n  end if;\n\n  return null;\nend$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "crypt",
+    "definition": "CREATE OR REPLACE FUNCTION public.crypt(text, text)\n RETURNS text\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pg_crypt$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "current_app_role",
+    "definition": "CREATE OR REPLACE FUNCTION public.current_app_role()\n RETURNS app_role\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\n  select coalesce((select role from public.profiles where id = auth.uid()), 'operator')::app_role\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "dearmor",
+    "definition": "CREATE OR REPLACE FUNCTION public.dearmor(text)\n RETURNS bytea\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pg_dearmor$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "decrypt",
+    "definition": "CREATE OR REPLACE FUNCTION public.decrypt(bytea, bytea, text)\n RETURNS bytea\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pg_decrypt$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "decrypt_iv",
+    "definition": "CREATE OR REPLACE FUNCTION public.decrypt_iv(bytea, bytea, bytea, text)\n RETURNS bytea\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pg_decrypt_iv$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "digest",
+    "definition": "CREATE OR REPLACE FUNCTION public.digest(bytea, text)\n RETURNS bytea\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pg_digest$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "digest",
+    "definition": "CREATE OR REPLACE FUNCTION public.digest(text, text)\n RETURNS bytea\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pg_digest$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "encrypt",
+    "definition": "CREATE OR REPLACE FUNCTION public.encrypt(bytea, bytea, text)\n RETURNS bytea\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pg_encrypt$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "encrypt_iv",
+    "definition": "CREATE OR REPLACE FUNCTION public.encrypt_iv(bytea, bytea, bytea, text)\n RETURNS bytea\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pg_encrypt_iv$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "ensure_list_batch",
+    "definition": "CREATE OR REPLACE FUNCTION public.ensure_list_batch(p_label text, p_is_public boolean DEFAULT true)\n RETURNS bigint\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nDECLARE\n  bid bigint;\nBEGIN\n  SELECT id INTO bid FROM public.list_batches WHERE label = p_label LIMIT 1;\n  IF bid IS NULL THEN\n    INSERT INTO public.list_batches(label, obtained_on, is_public, created_by)\n    VALUES (p_label, now()::date, COALESCE(p_is_public, true), auth.uid())\n    RETURNING id INTO bid;\n  END IF;\n  RETURN bid;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "ensure_list_batch",
+    "definition": "CREATE OR REPLACE FUNCTION public.ensure_list_batch(p_label text)\n RETURNS bigint\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\ndeclare bid bigint;\nbegin\n  select id into bid from public.list_batches where label = p_label limit 1;\n  if bid is null then\n    insert into public.list_batches(label, obtained_on)\n    values (p_label, now()::date)\n    returning id into bid;\n  end if;\n  return bid;\nend$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "gen_random_bytes",
+    "definition": "CREATE OR REPLACE FUNCTION public.gen_random_bytes(integer)\n RETURNS bytea\n LANGUAGE c\n PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pg_random_bytes$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "gen_random_uuid",
+    "definition": "CREATE OR REPLACE FUNCTION public.gen_random_uuid()\n RETURNS uuid\n LANGUAGE c\n PARALLEL SAFE\nAS '$libdir/pgcrypto', $function$pg_random_uuid$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "gen_salt",
+    "definition": "CREATE OR REPLACE FUNCTION public.gen_salt(text, integer)\n RETURNS text\n LANGUAGE c\n PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pg_gen_salt_rounds$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "gen_salt",
+    "definition": "CREATE OR REPLACE FUNCTION public.gen_salt(text)\n RETURNS text\n LANGUAGE c\n PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pg_gen_salt$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "geo_city_index_merge",
+    "definition": "CREATE OR REPLACE FUNCTION public.geo_city_index_merge()\n RETURNS void\n LANGUAGE plpgsql\nAS $function$\nbegin\n  /*\n    Table d'entrée attendue : public._geo_city_index_load (temporaire) avec :\n      city_name text, postal_code text, insee_code text,\n      dept_code text, region_name text, bucket text ('IDF'|'PROVINCE')\n    NB: city_norm est recalculée par le trigger créé en 019.\n  */\n  insert into public.geo_city_index(city_name, postal_code, insee_code, dept_code, region_name, bucket)\n  select l.city_name, l.postal_code, l.insee_code, l.dept_code, l.region_name, l.bucket::geo_zone_enum\n  from public._geo_city_index_load l\n  on conflict (city_norm, postal_code) do update\n  set city_name   = excluded.city_name,\n      insee_code  = excluded.insee_code,\n      dept_code   = excluded.dept_code,\n      region_name = excluded.region_name,\n      bucket      = excluded.bucket;\nend\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "handle_new_user",
+    "definition": "CREATE OR REPLACE FUNCTION public.handle_new_user()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public', 'auth'\nAS $function$\ndeclare\n  v_first text := nullif(new.raw_user_meta_data->>'first_name','');\n  v_last  text := nullif(new.raw_user_meta_data->>'last_name','');\n  v_user  text := coalesce(\n                   nullif(new.raw_user_meta_data->>'username',''),\n                   split_part(lower(new.email),'@',1)\n                 );\nbegin\n  insert into public.profiles (id, first_name, last_name, username, email, role, created_at)\n  values (new.id, v_first, v_last, v_user, new.email, 'operator', now())\n  on conflict (id) do nothing;\n  return new;\nend;\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "hmac",
+    "definition": "CREATE OR REPLACE FUNCTION public.hmac(bytea, bytea, text)\n RETURNS bytea\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pg_hmac$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "hmac",
+    "definition": "CREATE OR REPLACE FUNCTION public.hmac(text, text, text)\n RETURNS bytea\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pg_hmac$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "import_prospects_from_staging",
+    "definition": "CREATE OR REPLACE FUNCTION public.import_prospects_from_staging(p_batch_label text DEFAULT NULL::text, p_obtained_on date DEFAULT CURRENT_DATE, p_source source_enum DEFAULT NULL::source_enum, p_is_public boolean DEFAULT true)\n RETURNS TABLE(list_batch_id bigint, inserted_count integer)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nDECLARE v_batch_id bigint;\nBEGIN\n  INSERT INTO public.list_batches(label, obtained_on, source, size_hint, is_public, created_by)\n  VALUES (\n    COALESCE(NULLIF(p_batch_label,''), 'IMPORT_'||TO_CHAR(NOW(),'YYYYMMDD-HH24MISS')),\n    p_obtained_on,\n    p_source,\n    (SELECT COUNT(*) FROM public.staging_raw_prospects),\n    COALESCE(p_is_public, true),\n    auth.uid()\n  )\n  RETURNING id INTO v_batch_id;\n\n  -- corps original conservé (insert prospects)\n  INSERT INTO public.prospects(\n    list_batch_id,\n    first_name, last_name, civility,\n    address1, address2, postal_code, city,\n    email, phone_e164,\n    net_salary, co_borrower, co_net_salary,\n    comments, annexes, annexes_private,\n    employment_status, housing_status,\n    geo_zone\n  )\n  SELECT\n    v_batch_id,\n    s.first_name, s.last_name,\n    public.normalize_civility(s.civility),\n    s.address1, s.address2, s.postal_code, s.city,\n    NULLIF(LOWER(TRIM(s.email)), ''),\n    public.normalize_fr_phone(s.phone),\n    NULLIF(REPLACE(REGEXP_REPLACE(COALESCE(s.net_salary,''),'[^0-9.,\\\\-]','','g'),',','.'),'')::numeric,\n    CASE\n      WHEN LOWER(COALESCE(s.co_borrower,'')) IN ('1','true','t','yes','y','oui','vrai','x') THEN true\n      WHEN LOWER(COALESCE(s.co_borrower,'')) IN ('0','false','f','no','n','non') THEN false\n      ELSE null\n    END,\n    NULLIF(REPLACE(REGEXP_REPLACE(COALESCE(s.co_net_salary,''),'[^0-9.,\\\\-]','','g'),',','.'),'')::numeric,\n    s.comments,\n    s.annexes,\n    COALESCE(\n      CASE\n        WHEN LOWER(COALESCE(s.annexes_private,'')) IN ('1','true','t','yes','y','oui','vrai','x') THEN true\n        WHEN LOWER(COALESCE(s.annexes_private,'')) IN ('0','false','f','no','n','non') THEN false\n        ELSE null\n      END, false\n    ),\n    CASE\n      WHEN s.employment_status IN ('FONCTIONNAIRE','INDEPENDANT','SALA_PRIVE','RETRAITE')\n        THEN s.employment_status::public.employment_status_enum\n      ELSE null\n    END,\n    CASE\n      WHEN s.housing_status IN ('LOCATAIRE','PROPRIETAIRE','HEBERGE')\n        THEN s.housing_status::public.housing_status_enum\n      ELSE null\n    END,\n    (\n      CASE\n        WHEN LEFT(REGEXP_REPLACE(COALESCE(s.postal_code,''),'[^0-9]','','g'),2)\n             IN ('75','77','78','91','92','93','94','95') THEN 'IDF'\n        WHEN LENGTH(LEFT(REGEXP_REPLACE(COALESCE(s.postal_code,''),'[^0-9]','','g'),2)) = 2 THEN 'PROVINCE'\n        ELSE null\n      END\n    )::public.geo_zone_enum\n  FROM public.staging_raw_prospects s;\n\n  GET DIAGNOSTICS inserted_count = ROW_COUNT;\n  RETURN QUERY SELECT v_batch_id, inserted_count;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "import_prospects_from_staging",
+    "definition": "CREATE OR REPLACE FUNCTION public.import_prospects_from_staging(p_batch_label text DEFAULT NULL::text, p_obtained_on date DEFAULT CURRENT_DATE, p_source source_enum DEFAULT NULL::source_enum)\n RETURNS TABLE(list_batch_id bigint, inserted_count integer)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\ndeclare v_batch_id bigint;\nbegin\n  insert into public.list_batches(label, obtained_on, source, size_hint)\n  values (\n    coalesce(nullif(p_batch_label,''), 'IMPORT_'||to_char(now(),'YYYYMMDD-HH24MISS')),\n    p_obtained_on,\n    p_source,\n    (select count(*) from public.staging_raw_prospects)\n  )\n  returning id into v_batch_id;\n\n  with src as (\n    select\n      nullif(trim(first_name),'')                            as first_name,\n      nullif(trim(last_name),'')                             as last_name,\n      public.normalize_email(email)                          as email_norm,\n      public.normalize_fr_phone(phone)                       as phone_norm,\n      nullif(upper(trim(civility)),'')                       as civility_norm,\n      to_date(nullif(birth_date,''),'YYYY-MM-DD')            as birth_norm,\n      nullif(trim(address1),'')                              as address1_norm,\n      nullif(trim(address2),'')                              as address2_norm,\n      public.normalize_cp(postal_code)                       as postal_code_norm,\n      nullif(trim(city),'')                                  as city_norm,\n      nullif(regexp_replace(net_salary,'[^\\\\d.,]','','g'),'')::numeric    as net_salary_norm,\n      public.parse_bool(co_borrower)                         as co_borrower_norm,\n      nullif(regexp_replace(co_net_salary,'[^\\\\d.,]','','g'),'')::numeric as co_net_salary_norm,\n      nullif(trim(comments),'')                              as comments_norm,\n      nullif(trim(annexes),'')                               as annexes_norm,\n      coalesce(public.parse_bool(annexes_private), false)    as annexes_private_norm,\n      case upper(trim(source))\n        when 'PARRAINAGE'    then 'PARRAINAGE'::source_enum\n        when 'LEAD'          then 'LEAD'::source_enum\n        when 'LISTE_ACHETEE' then 'LISTE_ACHETEE'::source_enum\n        else null end                                         as source_enum_norm\n    from public.staging_raw_prospects\n  ),\n  filtered as (\n    select * from src\n    where first_name is not null\n      and last_name  is not null\n      and (phone_norm is not null or email_norm is not null)\n  ),\n  dedup as (\n    select f.*\n      from filtered f\n     where not exists (\n       select 1 from public.prospects p\n        where (f.phone_norm is not null and p.phone_e164 = f.phone_norm)\n           or (f.email_norm is not null and p.email      = f.email_norm)\n     )\n  )\n  insert into public.prospects (\n    list_batch_id, first_name, last_name, email, phone_e164,\n    civility, birth_date,\n    address1, address2, postal_code, city,\n    net_salary, co_borrower, co_net_salary,\n    comments, annexes, annexes_private,\n    source, stage\n  )\n  select\n    v_batch_id,\n    first_name, last_name, email_norm, phone_norm,\n    public.normalize_civility(civility_norm),   -- 👈 convert to enum (or NULL)\n    birth_norm,\n    address1_norm, address2_norm, postal_code_norm, city_norm,\n    net_salary_norm, co_borrower_norm, co_net_salary_norm,\n    comments_norm, annexes_norm, annexes_private_norm,\n    source_enum_norm, 'PHONING'::stage_enum\n  from dedup;\n\n  get diagnostics inserted_count = row_count;\n  return query select v_batch_id, inserted_count;\nend\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "is_admin",
+    "definition": "CREATE OR REPLACE FUNCTION public.is_admin()\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\n  select public.current_app_role() = 'admin'\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "is_manager_or_admin",
+    "definition": "CREATE OR REPLACE FUNCTION public.is_manager_or_admin()\n RETURNS boolean\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\n  select public.current_app_role() in ('admin','manager')\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "kpi_counters",
+    "definition": "CREATE OR REPLACE FUNCTION public.kpi_counters(p_from timestamp with time zone, p_to timestamp with time zone, p_operator_id uuid DEFAULT NULL::uuid)\n RETURNS TABLE(leads bigint, calls bigint, rdv bigint, quotes bigint, signed bigint, refused bigint)\n LANGUAGE sql\n SET search_path TO 'public'\nAS $function$\n  with\n  f_leads as (\n    select count(*)::bigint c\n    from prospects p\n    where p.created_at >= p_from and p.created_at < p_to\n      and (p_operator_id is null or p.owner_id = p_operator_id)\n  ),\n  f_calls as (\n    select count(*)::bigint c\n    from call_logs cl\n    where cl.created_at >= p_from and cl.created_at < p_to\n      and (p_operator_id is null or cl.operator_id = p_operator_id)\n  ),\n  f_rdv as (\n    select count(*)::bigint c\n    from appointments a\n    where a.created_at >= p_from and a.created_at < p_to\n      and (p_operator_id is null or a.user_id = p_operator_id)\n  ),\n  f_quotes as (\n    select count(*)::bigint c\n    from opportunity_milestones m\n    where m.quote_sent_at is not null\n      and m.quote_sent_at >= p_from and m.quote_sent_at < p_to\n  ),\n  f_signed as (\n    select count(*)::bigint c\n    from prospects p\n    where p.stage = 'CONTRACT'\n      and p.stage_changed_at >= p_from and p.stage_changed_at < p_to\n      and (p_operator_id is null or p.owner_id = p_operator_id)\n  ),\n  f_refused as (\n    select count(*)::bigint c\n    from prospects p\n    where p.stage = 'PHONING'\n      and coalesce(p.phoning_disposition::text,'') in ('REFUS','KO')\n      and p.updated_at >= p_from and p.updated_at < p_to\n      and (p_operator_id is null or p.owner_id = p_operator_id)\n  )\n  select\n    (select c from f_leads),\n    (select c from f_calls),\n    (select c from f_rdv),\n    (select c from f_quotes),\n    (select c from f_signed),\n    (select c from f_refused);\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "log_stage_change",
+    "definition": "CREATE OR REPLACE FUNCTION public.log_stage_change()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nbegin\n  if new.stage is distinct from old.stage then\n    new.stage_changed_at := now();\n    insert into public.prospect_stage_history\n      (prospect_id, from_stage, to_stage, changed_at, changed_by, note)\n    values (old.id, old.stage, new.stage, now(), auth.uid(), null);\n  end if;\n  return new;\nend $function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "map_outcome_to_failed_code",
+    "definition": "CREATE OR REPLACE FUNCTION public.map_outcome_to_failed_code(outcome call_outcome_enum)\n RETURNS phoning_disposition_enum\n LANGUAGE sql\n IMMUTABLE\nAS $function$\n  select case $1\n    when 'no_answer' then 'NRP'::phoning_disposition_enum\n    when 'voicemail' then 'REPONDEUR'::phoning_disposition_enum\n    when 'busy'      then 'MAUVAISE_COMM'::phoning_disposition_enum\n    else null::phoning_disposition_enum\n  end\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "normalize_city_text",
+    "definition": "CREATE OR REPLACE FUNCTION public.normalize_city_text(s text)\n RETURNS text\n LANGUAGE sql\n STABLE\nAS $function$\n  select lower(regexp_replace(unaccent(coalesce(s,'')),'[^a-z0-9]','','g'));\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "normalize_civility",
+    "definition": "CREATE OR REPLACE FUNCTION public.normalize_civility(s text)\n RETURNS civility_enum\n LANGUAGE plpgsql\n IMMUTABLE\nAS $function$\nDECLARE\n  t text;\nBEGIN\n  IF s IS NULL OR btrim(s) = '' THEN\n    RETURN NULL;\n  END IF;\n\n  t := lower(regexp_replace(public.unaccent(btrim(s)), '[\\.\\s_-]+', '', 'g'));\n\n  IF t IN ('m','mr','monsieur','mon','monsr','msieur') THEN\n    RETURN 'M.'::public.civility_enum;\n  ELSIF t IN ('mme','madame','mad','mm') THEN\n    RETURN 'Mme'::public.civility_enum;\n  ELSIF t IN ('mlle','ml','melle','mademoiselle','mademoisel','mlles') THEN\n    RETURN 'Mlle'::public.civility_enum;\n  END IF;\n\n  RETURN NULL;\nEND$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "normalize_cp",
+    "definition": "CREATE OR REPLACE FUNCTION public.normalize_cp(raw text)\n RETURNS text\n LANGUAGE sql\n IMMUTABLE\nAS $function$\n  select case when raw ~ '^\\d{5}$' then raw else null end\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "normalize_email",
+    "definition": "CREATE OR REPLACE FUNCTION public.normalize_email(raw text)\n RETURNS text\n LANGUAGE sql\n IMMUTABLE\nAS $function$\n  select case\n    when raw ~* '^[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}$' then lower(raw)\n    else null\n  end\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "normalize_fr_phone",
+    "definition": "CREATE OR REPLACE FUNCTION public.normalize_fr_phone(raw text)\n RETURNS text\n LANGUAGE plpgsql\n IMMUTABLE\nAS $function$\ndeclare p text;\nbegin\n  if raw is null or btrim(raw) = '' then\n    return null;\n  end if;\n\n  -- remove spaces and keep only digits and '+'\n  p := regexp_replace(raw, '\\s+', '', 'g');\n  p := regexp_replace(p, '[^0-9+]', '', 'g');\n\n  -- tolerate 0033 -> +33\n  if p ~ '^00' then\n    p := regexp_replace(p, '^00', '+');\n  end if;\n\n  -- canonical French cases\n  if p ~ '^\\+33\\d{9}$' then return p; end if;           -- already E.164 FR\n  if p ~ '^33\\d{9}$'  then return '+'||p; end if;       -- 33XXXXXXXXX\n  if p ~ '^0\\d{9}$'   then return '+33'||substr(p,2); end if;  -- 0XXXXXXXXX\n  if p ~ '^\\d{9}$'    then return '+33'||p; end if;     -- 9 digits bare\n\n  -- fallback: other E.164 +country numbers\n  if p ~ '^\\+\\d{8,15}$' then return p; end if;\n\n  return null;\nend\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "normalize_phone_fr",
+    "definition": "CREATE OR REPLACE FUNCTION public.normalize_phone_fr(raw text)\n RETURNS text\n LANGUAGE plpgsql\n IMMUTABLE\nAS $function$\ndeclare p text;\nbegin\n  if raw is null then return null; end if;\n  p := regexp_replace(raw, '\\D', '', 'g');\n  if p ~ '^0\\d{9}$' then\n    return '+33' || substr(p,2);\n  elseif p ~ '^33\\d{9}$' then\n    return '+' || p;\n  elseif p ~ '^\\+?\\d{8,15}$' then\n    return case when left(p,1)='+' then p else '+'||p end;\n  else\n    return null;\n  end if;\nend $function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "opportunity_mark_quote_sent",
+    "definition": "CREATE OR REPLACE FUNCTION public.opportunity_mark_quote_sent(p_prospect_id uuid)\n RETURNS void\n LANGUAGE sql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\n  insert into opportunity_milestones (prospect_id, quote_sent_at)\n  values (p_prospect_id, now())\n  on conflict (prospect_id) do update\n    set quote_sent_at = coalesce(opportunity_milestones.quote_sent_at, now())\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "opportunity_record_reminder",
+    "definition": "CREATE OR REPLACE FUNCTION public.opportunity_record_reminder(p_prospect_id uuid)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nbegin\n  insert into opportunity_milestones (prospect_id, last_reminder_at, reminder_count)\n  values (p_prospect_id, now(), 1)\n  on conflict (prospect_id) do update\n    set last_reminder_at = now(),\n        reminder_count   = coalesce(opportunity_milestones.reminder_count,0) + 1;\nend $function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "parse_bool",
+    "definition": "CREATE OR REPLACE FUNCTION public.parse_bool(raw text)\n RETURNS boolean\n LANGUAGE sql\n IMMUTABLE\nAS $function$\n  select case\n    when raw is null then null\n    when lower(raw) in ('true','vrai','1','yes','oui') then true\n    when lower(raw) in ('false','faux','0','no','non','') then false\n    else null\n  end\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "parse_bool_generic",
+    "definition": "CREATE OR REPLACE FUNCTION public.parse_bool_generic(s text)\n RETURNS boolean\n LANGUAGE sql\n IMMUTABLE\nAS $function$\n  select case\n    when s is null then null\n    when lower(trim(s)) in ('1','true','t','yes','y','oui','vrai','x') then true\n    when lower(trim(s)) in ('0','false','f','no','n','non') then false\n    else null\n  end;\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "parse_numeric_eur",
+    "definition": "CREATE OR REPLACE FUNCTION public.parse_numeric_eur(s text)\n RETURNS numeric\n LANGUAGE plpgsql\n IMMUTABLE\nAS $function$\ndeclare t text; n numeric;\nbegin\n  if s is null then return null; end if;\n  -- garde chiffres, ., , et -\n  t := regexp_replace(s, '[^0-9,.\\-]', '', 'g');\n\n  -- si virgule ET point présents, on essaie de deviner le séparateur décimal\n  if position(',' in t) > 0 and position('.' in t) > 0 then\n    if right(t,1) = ',' then\n      t := replace(replace(t,'.',''),',','.');\n    elsif right(t,1) = '.' then\n      t := replace(t,',','');\n    else\n      t := replace(replace(t,'.',''),',','.');\n    end if;\n  else\n    t := replace(t,',','.');\n  end if;\n\n  begin\n    n := t::numeric;\n  exception when others then\n    return null;\n  end;\n  return n;\nend$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "pgp_armor_headers",
+    "definition": "CREATE OR REPLACE FUNCTION public.pgp_armor_headers(text, OUT key text, OUT value text)\n RETURNS SETOF record\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pgp_armor_headers$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "pgp_key_id",
+    "definition": "CREATE OR REPLACE FUNCTION public.pgp_key_id(bytea)\n RETURNS text\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pgp_key_id_w$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "pgp_pub_decrypt",
+    "definition": "CREATE OR REPLACE FUNCTION public.pgp_pub_decrypt(bytea, bytea, text)\n RETURNS text\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pgp_pub_decrypt_text$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "pgp_pub_decrypt",
+    "definition": "CREATE OR REPLACE FUNCTION public.pgp_pub_decrypt(bytea, bytea, text, text)\n RETURNS text\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pgp_pub_decrypt_text$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "pgp_pub_decrypt",
+    "definition": "CREATE OR REPLACE FUNCTION public.pgp_pub_decrypt(bytea, bytea)\n RETURNS text\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pgp_pub_decrypt_text$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "pgp_pub_decrypt_bytea",
+    "definition": "CREATE OR REPLACE FUNCTION public.pgp_pub_decrypt_bytea(bytea, bytea, text)\n RETURNS bytea\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pgp_pub_decrypt_bytea$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "pgp_pub_decrypt_bytea",
+    "definition": "CREATE OR REPLACE FUNCTION public.pgp_pub_decrypt_bytea(bytea, bytea, text, text)\n RETURNS bytea\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pgp_pub_decrypt_bytea$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "pgp_pub_decrypt_bytea",
+    "definition": "CREATE OR REPLACE FUNCTION public.pgp_pub_decrypt_bytea(bytea, bytea)\n RETURNS bytea\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pgp_pub_decrypt_bytea$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "pgp_pub_encrypt",
+    "definition": "CREATE OR REPLACE FUNCTION public.pgp_pub_encrypt(text, bytea, text)\n RETURNS bytea\n LANGUAGE c\n PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pgp_pub_encrypt_text$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "pgp_pub_encrypt",
+    "definition": "CREATE OR REPLACE FUNCTION public.pgp_pub_encrypt(text, bytea)\n RETURNS bytea\n LANGUAGE c\n PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pgp_pub_encrypt_text$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "pgp_pub_encrypt_bytea",
+    "definition": "CREATE OR REPLACE FUNCTION public.pgp_pub_encrypt_bytea(bytea, bytea)\n RETURNS bytea\n LANGUAGE c\n PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pgp_pub_encrypt_bytea$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "pgp_pub_encrypt_bytea",
+    "definition": "CREATE OR REPLACE FUNCTION public.pgp_pub_encrypt_bytea(bytea, bytea, text)\n RETURNS bytea\n LANGUAGE c\n PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pgp_pub_encrypt_bytea$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "pgp_sym_decrypt",
+    "definition": "CREATE OR REPLACE FUNCTION public.pgp_sym_decrypt(bytea, text, text)\n RETURNS text\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pgp_sym_decrypt_text$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "pgp_sym_decrypt",
+    "definition": "CREATE OR REPLACE FUNCTION public.pgp_sym_decrypt(bytea, text)\n RETURNS text\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pgp_sym_decrypt_text$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "pgp_sym_decrypt_bytea",
+    "definition": "CREATE OR REPLACE FUNCTION public.pgp_sym_decrypt_bytea(bytea, text)\n RETURNS bytea\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pgp_sym_decrypt_bytea$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "pgp_sym_decrypt_bytea",
+    "definition": "CREATE OR REPLACE FUNCTION public.pgp_sym_decrypt_bytea(bytea, text, text)\n RETURNS bytea\n LANGUAGE c\n IMMUTABLE PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pgp_sym_decrypt_bytea$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "pgp_sym_encrypt",
+    "definition": "CREATE OR REPLACE FUNCTION public.pgp_sym_encrypt(text, text)\n RETURNS bytea\n LANGUAGE c\n PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pgp_sym_encrypt_text$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "pgp_sym_encrypt",
+    "definition": "CREATE OR REPLACE FUNCTION public.pgp_sym_encrypt(text, text, text)\n RETURNS bytea\n LANGUAGE c\n PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pgp_sym_encrypt_text$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "pgp_sym_encrypt_bytea",
+    "definition": "CREATE OR REPLACE FUNCTION public.pgp_sym_encrypt_bytea(bytea, text, text)\n RETURNS bytea\n LANGUAGE c\n PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pgp_sym_encrypt_bytea$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "pgp_sym_encrypt_bytea",
+    "definition": "CREATE OR REPLACE FUNCTION public.pgp_sym_encrypt_bytea(bytea, text)\n RETURNS bytea\n LANGUAGE c\n PARALLEL SAFE STRICT\nAS '$libdir/pgcrypto', $function$pgp_sym_encrypt_bytea$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "prevent_phoning_disposition_reset",
+    "definition": "CREATE OR REPLACE FUNCTION public.prevent_phoning_disposition_reset()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nbegin\n  if old.phoning_disposition is not null and new.phoning_disposition is null then\n    raise exception 'Impossible de remettre le statut phoning à NULL (Nouveau lead) une fois défini.';\n  end if;\n  return new;\nend $function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "prospect_mark_ko",
+    "definition": "CREATE OR REPLACE FUNCTION public.prospect_mark_ko(p_prospect_id uuid, p_reason text DEFAULT NULL::text)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nbegin\n  update public.prospects\n     set stage = 'PHONING',\n         phoning_disposition = 'KO',\n         stage_changed_at = now(),\n         ko_reason = p_reason\n   where id = p_prospect_id;\n\n  if p_reason is not null then\n    update public.prospects\n       set comments = coalesce(comments,'') || E'\\n— KO: ' || p_reason\n     where id = p_prospect_id;\n  end if;\nend;\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "prospect_mark_refused",
+    "definition": "CREATE OR REPLACE FUNCTION public.prospect_mark_refused(p_prospect_id uuid, p_reason text DEFAULT NULL::text)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nbegin\n  update prospects\n     set stage = 'PHONING',\n         phoning_disposition = 'REFUS',\n         stage_changed_at = now(),\n         ko_reason = p_reason\n   where id = p_prospect_id;\n\n  if p_reason is not null then\n    update prospects set comments = coalesce(comments,'') || E'\\n— Refus: ' || p_reason where id = p_prospect_id;\n  end if;\nend $function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "prospect_to_opportunity",
+    "definition": "CREATE OR REPLACE FUNCTION public.prospect_to_opportunity(p_prospect_id uuid, p_note text DEFAULT NULL::text)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nbegin\n  update prospects\n     set stage = 'OPPORTUNITY', stage_changed_at = now()\n   where id = p_prospect_id;\n  if p_note is not null then\n    update prospects set comments = coalesce(comments,'') || E'\\n— ' || p_note where id = p_prospect_id;\n  end if;\nend $function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "prospect_to_validation",
+    "definition": "CREATE OR REPLACE FUNCTION public.prospect_to_validation(p_prospect_id uuid, p_note text DEFAULT NULL::text)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nbegin\n  update prospects\n     set stage = 'VALIDATION', stage_changed_at = now()\n   where id = p_prospect_id;\n  if p_note is not null then\n    update prospects set comments = coalesce(comments,'') || E'\\n— ' || p_note where id = p_prospect_id;\n  end if;\nend $function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "recompute_docs_status",
+    "definition": "CREATE OR REPLACE FUNCTION public.recompute_docs_status(p_prospect_id uuid)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\ndeclare\n  v_any_req boolean;        -- au moins un doc demandé (≠ NOT_REQUIRED)\n  v_any_incomplete boolean; -- présence d’au moins un INCOMPLETE\n  v_all_received boolean;   -- tous les \"demandés\" sont RECEIVED\n  v_first_received timestamptz;\n  v_all_received_at timestamptz;\n  v_any_requested_at timestamptz;\nbegin\n  -- agrégation d'état\n  select\n    exists(select 1 from documents d where d.prospect_id = p_prospect_id and d.status is distinct from 'NOT_REQUIRED'),\n    exists(select 1 from documents d where d.prospect_id = p_prospect_id and d.status = 'INCOMPLETE'),\n    coalesce(bool_and(d.status = 'RECEIVED') filter (where d.status is distinct from 'NOT_REQUIRED'), false)\n  into v_any_req, v_any_incomplete, v_all_received\n  from documents d where d.prospect_id = p_prospect_id;\n\n  -- dates pour milestones\n  select min(received_at), max(received_at)\n    into v_first_received, v_all_received_at\n  from documents d\n  where d.prospect_id = p_prospect_id and d.status = 'RECEIVED';\n\n  select min(requested_at)\n    into v_any_requested_at\n  from documents d\n  where d.prospect_id = p_prospect_id and d.status is distinct from 'NOT_REQUIRED';\n\n  -- règle vers prospects.docs_status\n  update prospects p\n     set docs_status =\n       case\n         when not v_any_req then null                              -- \"À initier\" (champ vide)\n         when v_any_incomplete then 'INCOMPLETE'::docs_status_enum\n         when v_all_received   then 'COMPLETE'::docs_status_enum\n         else 'PENDING'::docs_status_enum\n       end\n   where p.id = p_prospect_id;\n\n  -- préparation milestone row\n  insert into opportunity_milestones (prospect_id) values (p_prospect_id)\n  on conflict (prospect_id) do nothing;\n\n  -- mise à jour milestone dates\n  update opportunity_milestones m\n     set docs_requested_at      = coalesce(m.docs_requested_at, v_any_requested_at),\n         docs_first_received_at = coalesce(m.docs_first_received_at, v_first_received),\n         docs_completed_at      = case when v_all_received\n                                        then coalesce(m.docs_completed_at, coalesce(v_all_received_at, now()))\n                                        else m.docs_completed_at end\n   where m.prospect_id = p_prospect_id;\nend $function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "recount_failed_attempts",
+    "definition": "CREATE OR REPLACE FUNCTION public.recount_failed_attempts(p_prospect_id uuid DEFAULT NULL::uuid)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nbegin\n  if p_prospect_id is null then\n    update public.prospects p\n       set phoning_failed_attempts_count = coalesce((\n             select count(1) from public.call_logs c\n              where c.prospect_id = p.id\n                and public.map_outcome_to_failed_code(c.outcome) is not null\n           ),0),\n           phoning_last_failed_at = (\n             select max(coalesce(c.ended_at, c.started_at))\n               from public.call_logs c\n              where c.prospect_id = p.id\n                and public.map_outcome_to_failed_code(c.outcome) is not null\n           ),\n           phoning_last_failed_code = (\n             select public.map_outcome_to_failed_code(c.outcome)\n               from public.call_logs c\n              where c.prospect_id = p.id\n                and public.map_outcome_to_failed_code(c.outcome) is not null\n              order by coalesce(c.ended_at, c.started_at) desc\n              limit 1\n           );\n  else\n    update public.prospects p\n       set phoning_failed_attempts_count = coalesce((\n             select count(1) from public.call_logs c\n              where c.prospect_id = p_prospect_id\n                and public.map_outcome_to_failed_code(c.outcome) is not null\n           ),0),\n           phoning_last_failed_at = (\n             select max(coalesce(c.ended_at, c.started_at))\n               from public.call_logs c\n              where c.prospect_id = p_prospect_id\n                and public.map_outcome_to_failed_code(c.outcome) is not null\n           ),\n           phoning_last_failed_code = (\n             select public.map_outcome_to_failed_code(c.outcome)\n               from public.call_logs c\n              where c.prospect_id = p_prospect_id\n                and public.map_outcome_to_failed_code(c.outcome) is not null\n              order by coalesce(c.ended_at, c.started_at) desc\n              limit 1\n           )\n     where p.id = p_prospect_id;\n  end if;\nend $function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "set_call_duration",
+    "definition": "CREATE OR REPLACE FUNCTION public.set_call_duration()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nbegin\n  if new.ended_at is not null then\n    new.duration_seconds := greatest(0, extract(epoch from (new.ended_at - new.started_at)))::int;\n  end if;\n  return new;\nend $function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "set_updated_at",
+    "definition": "CREATE OR REPLACE FUNCTION public.set_updated_at()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nbegin\n  new.updated_at := now();\n  return new;\nend $function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "staging_promote_batch",
+    "definition": "CREATE OR REPLACE FUNCTION public.staging_promote_batch(p_batch_label text)\n RETURNS TABLE(batch_id bigint, inserted_count integer)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nDECLARE\n  v_batch_id bigint;\n  v_cnt int;\nBEGIN\n  INSERT INTO public.list_batches(label)\n  VALUES (p_batch_label)\n  RETURNING id INTO v_batch_id;\n\n  INSERT INTO public.prospects(\n    list_batch_id,\n    first_name, last_name, civility,\n    address1, address2, postal_code, city,\n    email, phone_e164,\n    net_salary, co_borrower, co_net_salary,\n    comments, annexes, annexes_private,\n    employment_status, housing_status,\n    geo_zone\n  )\n  SELECT\n    v_batch_id,\n    s.first_name, s.last_name,\n    public.normalize_civility(s.civility),\n    s.address1, s.address2, s.postal_code, s.city,\n    nullif(lower(trim(s.email)), ''),\n    public.normalize_fr_phone(s.phone),\n    nullif(replace(regexp_replace(coalesce(s.net_salary,''),'[^0-9.,\\-]','','g'),',','.'),'')::numeric,\n    CASE\n      WHEN lower(coalesce(s.co_borrower,'')) IN ('1','true','t','yes','y','oui','vrai','x') THEN true\n      WHEN lower(coalesce(s.co_borrower,'')) IN ('0','false','f','no','n','non') THEN false\n      ELSE null\n    END,\n    nullif(replace(regexp_replace(coalesce(s.co_net_salary,''),'[^0-9.,\\-]','','g'),',','.'),'')::numeric,\n    s.comments,\n    s.annexes,\n    coalesce(\n      CASE\n        WHEN lower(coalesce(s.annexes_private,'')) IN ('1','true','t','yes','y','oui','vrai','x') THEN true\n        WHEN lower(coalesce(s.annexes_private,'')) IN ('0','false','f','no','n','non') THEN false\n        ELSE null\n      END, false\n    ),\n    CASE\n      WHEN s.employment_status IN ('FONCTIONNAIRE','INDEPENDANT','SALA_PRIVE','RETRAITE')\n        THEN s.employment_status::public.employment_status_enum\n      ELSE null\n    END,\n    CASE\n      WHEN s.housing_status IN ('LOCATAIRE','PROPRIETAIRE','HEBERGE')\n        THEN s.housing_status::public.housing_status_enum\n      ELSE null\n    END,\n    (\n      CASE\n        WHEN left(regexp_replace(coalesce(s.postal_code,''),'[^0-9]','','g'),2)\n             IN ('75','77','78','91','92','93','94','95') THEN 'IDF'\n        WHEN length(left(regexp_replace(coalesce(s.postal_code,''),'[^0-9]','','g'),2)) = 2 THEN 'PROVINCE'\n        WHEN gl.bucket IS NOT NULL THEN gl.bucket::text\n        ELSE null\n      END\n    )::public.geo_zone_enum\n  FROM public.staging_raw_prospects s\n  LEFT JOIN LATERAL (\n    SELECT g.bucket\n    FROM public.geo_city_index g\n    WHERE g.city_norm = s.city_norm\n      AND (s.postal_code IS NULL OR g.postal_code = s.postal_code)\n    ORDER BY (g.postal_code = s.postal_code) DESC NULLS LAST\n    LIMIT 1\n  ) gl ON true\n  WHERE s.batch_label = p_batch_label;\n\n  GET DIAGNOSTICS v_cnt = ROW_COUNT;\n  RETURN QUERY SELECT v_batch_id, v_cnt;\nEND\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "staging_promote_batch",
+    "definition": "CREATE OR REPLACE FUNCTION public.staging_promote_batch(p_batch_label text, p_is_public boolean DEFAULT true)\n RETURNS TABLE(batch_id bigint, inserted_count integer)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nDECLARE\n  v_batch_id bigint;\n  v_cnt int;\nBEGIN\n  INSERT INTO public.list_batches(label, is_public, created_by)\n  VALUES (p_batch_label, COALESCE(p_is_public, true), auth.uid())\n  RETURNING id INTO v_batch_id;\n\n  -- corps original conservé (imports staging)\n  INSERT INTO public.prospects(\n    list_batch_id,\n    first_name, last_name, civility,\n    address1, address2, postal_code, city,\n    email, phone_e164,\n    net_salary, co_borrower, co_net_salary,\n    comments, annexes, annexes_private,\n    employment_status, housing_status,\n    geo_zone\n  )\n  SELECT\n    v_batch_id,\n    s.first_name, s.last_name,\n    public.normalize_civility(s.civility),\n    s.address1, s.address2, s.postal_code, s.city,\n    NULLIF(LOWER(TRIM(s.email)), ''),\n    public.normalize_fr_phone(s.phone),\n    NULLIF(REPLACE(REGEXP_REPLACE(COALESCE(s.net_salary,''),'[^0-9.,\\\\-]','','g'),',','.'),'')::numeric,\n    CASE\n      WHEN LOWER(COALESCE(s.co_borrower,'')) IN ('1','true','t','yes','y','oui','vrai','x') THEN true\n      WHEN LOWER(COALESCE(s.co_borrower,'')) IN ('0','false','f','no','n','non') THEN false\n      ELSE null\n    END,\n    NULLIF(REPLACE(REGEXP_REPLACE(COALESCE(s.co_net_salary,''),'[^0-9.,\\\\-]','','g'),',','.'),'')::numeric,\n    s.comments,\n    s.annexes,\n    COALESCE(\n      CASE\n        WHEN LOWER(COALESCE(s.annexes_private,'')) IN ('1','true','t','yes','y','oui','vrai','x') THEN true\n        WHEN LOWER(COALESCE(s.annexes_private,'')) IN ('0','false','f','no','n','non') THEN false\n        ELSE null\n      END, false\n    ),\n    CASE\n      WHEN s.employment_status IN ('FONCTIONNAIRE','INDEPENDANT','SALA_PRIVE','RETRAITE')\n        THEN s.employment_status::public.employment_status_enum\n      ELSE null\n    END,\n    CASE\n      WHEN s.housing_status IN ('LOCATAIRE','PROPRIETAIRE','HEBERGE')\n        THEN s.housing_status::public.housing_status_enum\n      ELSE null\n    END,\n    (\n      CASE\n        WHEN LEFT(REGEXP_REPLACE(COALESCE(s.postal_code,''),'[^0-9]','','g'),2)\n             IN ('75','77','78','91','92','93','94','95') THEN 'IDF'\n        WHEN LENGTH(LEFT(REGEXP_REPLACE(COALESCE(s.postal_code,''),'[^0-9]','','g'),2)) = 2 THEN 'PROVINCE'\n        ELSE null\n      END\n    )::public.geo_zone_enum\n  FROM public.staging_raw_prospects s\n  WHERE s.batch_label = p_batch_label;\n\n  GET DIAGNOSTICS v_cnt = ROW_COUNT;\n  RETURN QUERY SELECT v_batch_id, v_cnt;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "staging_raw_prospects_clear_batch",
+    "definition": "CREATE OR REPLACE FUNCTION public.staging_raw_prospects_clear_batch(p_batch_label text)\n RETURNS TABLE(deleted_rows bigint)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\ndeclare\n  v_cnt  bigint;\n  v_left bigint;\n  v_seq  text;\nbegin\n  delete from public.staging_raw_prospects s\n  where s.batch_label = p_batch_label;\n\n  GET DIAGNOSTICS v_cnt = ROW_COUNT;\n\n  select count(*) into v_left from public.staging_raw_prospects;\n  if v_left = 0 then\n    select pg_get_serial_sequence('public.staging_raw_prospects','id') into v_seq;\n    if v_seq is not null then\n      perform setval(v_seq, 1, false);\n    end if;\n  end if;\n\n  return query select v_cnt;\nend\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "staging_raw_prospects_truncate",
+    "definition": "CREATE OR REPLACE FUNCTION public.staging_raw_prospects_truncate()\n RETURNS TABLE(truncated boolean, deleted_rows bigint)\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\ndeclare\n  v_cnt bigint;\nbegin\n  select count(*) into v_cnt from public.staging_raw_prospects;\n  -- pas de CASCADE : on ne touche à rien d'autre\n  execute 'truncate table public.staging_raw_prospects restart identity';\n  return query select true, v_cnt;\nend\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "start_docs_collection",
+    "definition": "CREATE OR REPLACE FUNCTION public.start_docs_collection(p_prospect_id uuid)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\nbegin\n  insert into opportunity_milestones (prospect_id, docs_requested_at)\n  values (p_prospect_id, now())\n  on conflict (prospect_id) do update\n    set docs_requested_at = coalesce(opportunity_milestones.docs_requested_at, excluded.docs_requested_at);\n\n  update documents\n     set status='REQUESTED', requested_at=coalesce(requested_at, now())\n   where prospect_id = p_prospect_id and status is null;\n\n  perform public.recompute_docs_status(p_prospect_id);\nend $function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "trg_campaigns_apply_meta_from_filter_json",
+    "definition": "CREATE OR REPLACE FUNCTION public.trg_campaigns_apply_meta_from_filter_json()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\ndeclare\n  v_meta   jsonb;\n  v_status public.campaign_status_enum;\n  v_start  date;\n  v_end    date;\nbegin\n  if NEW.filter_json is null then\n    return NEW;\n  end if;\n\n  v_meta := NEW.filter_json->'meta';\n  if v_meta is null then\n    return NEW;\n  end if;\n\n  -- Status: only allow INACTIVE / ACTIVE at creation time.\n  if (v_meta ? 'status') then\n    begin\n      v_status := (v_meta->>'status')::public.campaign_status_enum;\n      if v_status in ('INACTIVE','ACTIVE') then\n        NEW.status := v_status;\n      end if;\n    exception when others then\n      -- ignore invalid value\n      null;\n    end;\n  end if;\n\n  -- start_at (optional)\n  if (v_meta ? 'start_at') then\n    begin\n      v_start := (v_meta->>'start_at')::date;\n      NEW.start_at := v_start;\n    exception when others then\n      -- ignore parse error\n      null;\n    end;\n  end if;\n\n  -- end_at (optional)\n  if (v_meta ? 'end_at') then\n    begin\n      v_end := (v_meta->>'end_at')::date;\n      NEW.end_at := v_end;\n    exception when others then\n      -- ignore parse error\n      null;\n    end;\n  end if;\n\n  return NEW;\nend\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "trg_campaigns_lock_when_archived",
+    "definition": "CREATE OR REPLACE FUNCTION public.trg_campaigns_lock_when_archived()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n  v_is_admin_or_service boolean;\nBEGIN\n  v_is_admin_or_service := COALESCE(public._is_admin_or_service(), false);\n\n  IF OLD.status = 'ARCHIVED' AND NOT v_is_admin_or_service THEN\n    IF (NEW.* IS DISTINCT FROM OLD.*) THEN\n      RAISE EXCEPTION 'Cette campagne est archivée et ne peut plus être modifiée.' USING ERRCODE = 'P0001';\n    END IF;\n  END IF;\n\n  IF OLD.status = 'ARCHIVED' AND NEW.status IS DISTINCT FROM OLD.status AND NOT v_is_admin_or_service THEN\n    RAISE EXCEPTION 'Impossible de désarchiver une campagne (% -> %).', OLD.status, NEW.status USING ERRCODE = 'P0001';\n  END IF;\n\n  RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "trg_campaigns_status_audit",
+    "definition": "CREATE OR REPLACE FUNCTION public.trg_campaigns_status_audit()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  IF TG_OP = 'INSERT' THEN\n    IF NEW.status_changed_at IS NULL THEN\n      NEW.status_changed_at := now();\n    END IF;\n\n    IF NEW.status = 'ACTIVE' AND NEW.activated_at IS NULL THEN\n      NEW.activated_at := now();\n    END IF;\n\n    IF NEW.status = 'ARCHIVED' AND NEW.archived_at IS NULL THEN\n      NEW.archived_at := now();\n    END IF;\n\n    RETURN NEW;\n  END IF;\n\n  IF NEW.status IS DISTINCT FROM OLD.status THEN\n    NEW.status_changed_at := now();\n\n    IF NEW.status = 'ACTIVE' AND NEW.activated_at IS NULL THEN\n      NEW.activated_at := now();\n    END IF;\n\n    IF NEW.status = 'ARCHIVED' AND NEW.archived_at IS NULL THEN\n      NEW.archived_at := now();\n    END IF;\n  END IF;\n\n  RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "trg_documents_after_change",
+    "definition": "CREATE OR REPLACE FUNCTION public.trg_documents_after_change()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'public'\nAS $function$\ndeclare pid uuid;\nbegin\n  pid := coalesce(new.prospect_id, old.prospect_id);\n  perform public.recompute_docs_status(pid);\n  return coalesce(new, old);\nend $function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "trg_prospect_geo_zone",
+    "definition": "CREATE OR REPLACE FUNCTION public.trg_prospect_geo_zone()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nbegin\n  if new.postal_code is distinct from coalesce(old.postal_code,'__NULL__') then\n    new.geo_zone := public.classify_geo_zone(new.postal_code);\n  elsif new.geo_zone is null then\n    new.geo_zone := public.classify_geo_zone(new.postal_code);\n  end if;\n  return new;\nend $function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "trg_prospects_normalize_phone",
+    "definition": "CREATE OR REPLACE FUNCTION public.trg_prospects_normalize_phone()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nbegin\n  if new.phone_e164 is not null then\n    new.phone_e164 := public.normalize_fr_phone(new.phone_e164);\n  end if;\n  return new;\nend\n$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "trg_set_city_norm",
+    "definition": "CREATE OR REPLACE FUNCTION public.trg_set_city_norm()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nbegin\n  new.city_norm := public.normalize_city_text(new.city);\n  return new;\nend$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "unaccent",
+    "definition": "CREATE OR REPLACE FUNCTION public.unaccent(regdictionary, text)\n RETURNS text\n LANGUAGE c\n STABLE PARALLEL SAFE STRICT\nAS '$libdir/unaccent', $function$unaccent_dict$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "unaccent",
+    "definition": "CREATE OR REPLACE FUNCTION public.unaccent(text)\n RETURNS text\n LANGUAGE c\n STABLE PARALLEL SAFE STRICT\nAS '$libdir/unaccent', $function$unaccent_dict$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "unaccent_init",
+    "definition": "CREATE OR REPLACE FUNCTION public.unaccent_init(internal)\n RETURNS internal\n LANGUAGE c\n PARALLEL SAFE\nAS '$libdir/unaccent', $function$unaccent_init$function$\n"
+  },
+  {
+    "schema": "public",
+    "name": "unaccent_lexize",
+    "definition": "CREATE OR REPLACE FUNCTION public.unaccent_lexize(internal, internal, internal, internal)\n RETURNS internal\n LANGUAGE c\n PARALLEL SAFE\nAS '$libdir/unaccent', $function$unaccent_lexize$function$\n"
+  },
+  {
+    "schema": "storage",
+    "name": "add_prefixes",
+    "definition": "CREATE OR REPLACE FUNCTION storage.add_prefixes(_bucket_id text, _name text)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\nAS $function$\nDECLARE\n    prefixes text[];\nBEGIN\n    prefixes := \"storage\".\"get_prefixes\"(\"_name\");\n\n    IF array_length(prefixes, 1) > 0 THEN\n        INSERT INTO storage.prefixes (name, bucket_id)\n        SELECT UNNEST(prefixes) as name, \"_bucket_id\" ON CONFLICT DO NOTHING;\n    END IF;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "name": "can_insert_object",
+    "definition": "CREATE OR REPLACE FUNCTION storage.can_insert_object(bucketid text, name text, owner uuid, metadata jsonb)\n RETURNS void\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  INSERT INTO \"storage\".\"objects\" (\"bucket_id\", \"name\", \"owner\", \"metadata\") VALUES (bucketid, name, owner, metadata);\n  -- hack to rollback the successful insert\n  RAISE sqlstate 'PT200' using\n  message = 'ROLLBACK',\n  detail = 'rollback successful insert';\nEND\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "name": "delete_leaf_prefixes",
+    "definition": "CREATE OR REPLACE FUNCTION storage.delete_leaf_prefixes(bucket_ids text[], names text[])\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\nAS $function$\nDECLARE\n    v_rows_deleted integer;\nBEGIN\n    LOOP\n        WITH candidates AS (\n            SELECT DISTINCT\n                t.bucket_id,\n                unnest(storage.get_prefixes(t.name)) AS name\n            FROM unnest(bucket_ids, names) AS t(bucket_id, name)\n        ),\n        uniq AS (\n             SELECT\n                 bucket_id,\n                 name,\n                 storage.get_level(name) AS level\n             FROM candidates\n             WHERE name <> ''\n             GROUP BY bucket_id, name\n        ),\n        leaf AS (\n             SELECT\n                 p.bucket_id,\n                 p.name,\n                 p.level\n             FROM storage.prefixes AS p\n                  JOIN uniq AS u\n                       ON u.bucket_id = p.bucket_id\n                           AND u.name = p.name\n                           AND u.level = p.level\n             WHERE NOT EXISTS (\n                 SELECT 1\n                 FROM storage.objects AS o\n                 WHERE o.bucket_id = p.bucket_id\n                   AND o.level = p.level + 1\n                   AND o.name COLLATE \"C\" LIKE p.name || '/%'\n             )\n             AND NOT EXISTS (\n                 SELECT 1\n                 FROM storage.prefixes AS c\n                 WHERE c.bucket_id = p.bucket_id\n                   AND c.level = p.level + 1\n                   AND c.name COLLATE \"C\" LIKE p.name || '/%'\n             )\n        )\n        DELETE\n        FROM storage.prefixes AS p\n            USING leaf AS l\n        WHERE p.bucket_id = l.bucket_id\n          AND p.name = l.name\n          AND p.level = l.level;\n\n        GET DIAGNOSTICS v_rows_deleted = ROW_COUNT;\n        EXIT WHEN v_rows_deleted = 0;\n    END LOOP;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "name": "delete_prefix",
+    "definition": "CREATE OR REPLACE FUNCTION storage.delete_prefix(_bucket_id text, _name text)\n RETURNS boolean\n LANGUAGE plpgsql\n SECURITY DEFINER\nAS $function$\nBEGIN\n    -- Check if we can delete the prefix\n    IF EXISTS(\n        SELECT FROM \"storage\".\"prefixes\"\n        WHERE \"prefixes\".\"bucket_id\" = \"_bucket_id\"\n          AND level = \"storage\".\"get_level\"(\"_name\") + 1\n          AND \"prefixes\".\"name\" COLLATE \"C\" LIKE \"_name\" || '/%'\n        LIMIT 1\n    )\n    OR EXISTS(\n        SELECT FROM \"storage\".\"objects\"\n        WHERE \"objects\".\"bucket_id\" = \"_bucket_id\"\n          AND \"storage\".\"get_level\"(\"objects\".\"name\") = \"storage\".\"get_level\"(\"_name\") + 1\n          AND \"objects\".\"name\" COLLATE \"C\" LIKE \"_name\" || '/%'\n        LIMIT 1\n    ) THEN\n    -- There are sub-objects, skip deletion\n    RETURN false;\n    ELSE\n        DELETE FROM \"storage\".\"prefixes\"\n        WHERE \"prefixes\".\"bucket_id\" = \"_bucket_id\"\n          AND level = \"storage\".\"get_level\"(\"_name\")\n          AND \"prefixes\".\"name\" = \"_name\";\n        RETURN true;\n    END IF;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "name": "delete_prefix_hierarchy_trigger",
+    "definition": "CREATE OR REPLACE FUNCTION storage.delete_prefix_hierarchy_trigger()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n    prefix text;\nBEGIN\n    prefix := \"storage\".\"get_prefix\"(OLD.\"name\");\n\n    IF coalesce(prefix, '') != '' THEN\n        PERFORM \"storage\".\"delete_prefix\"(OLD.\"bucket_id\", prefix);\n    END IF;\n\n    RETURN OLD;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "name": "enforce_bucket_name_length",
+    "definition": "CREATE OR REPLACE FUNCTION storage.enforce_bucket_name_length()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nbegin\n    if length(new.name) > 100 then\n        raise exception 'bucket name \"%\" is too long (% characters). Max is 100.', new.name, length(new.name);\n    end if;\n    return new;\nend;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "name": "extension",
+    "definition": "CREATE OR REPLACE FUNCTION storage.extension(name text)\n RETURNS text\n LANGUAGE plpgsql\n IMMUTABLE\nAS $function$\nDECLARE\n    _parts text[];\n    _filename text;\nBEGIN\n    SELECT string_to_array(name, '/') INTO _parts;\n    SELECT _parts[array_length(_parts,1)] INTO _filename;\n    RETURN reverse(split_part(reverse(_filename), '.', 1));\nEND\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "name": "filename",
+    "definition": "CREATE OR REPLACE FUNCTION storage.filename(name text)\n RETURNS text\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n_parts text[];\nBEGIN\n\tselect string_to_array(name, '/') into _parts;\n\treturn _parts[array_length(_parts,1)];\nEND\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "name": "foldername",
+    "definition": "CREATE OR REPLACE FUNCTION storage.foldername(name text)\n RETURNS text[]\n LANGUAGE plpgsql\n IMMUTABLE\nAS $function$\nDECLARE\n    _parts text[];\nBEGIN\n    -- Split on \"/\" to get path segments\n    SELECT string_to_array(name, '/') INTO _parts;\n    -- Return everything except the last segment\n    RETURN _parts[1 : array_length(_parts,1) - 1];\nEND\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "name": "get_level",
+    "definition": "CREATE OR REPLACE FUNCTION storage.get_level(name text)\n RETURNS integer\n LANGUAGE sql\n IMMUTABLE STRICT\nAS $function$\nSELECT array_length(string_to_array(\"name\", '/'), 1);\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "name": "get_prefix",
+    "definition": "CREATE OR REPLACE FUNCTION storage.get_prefix(name text)\n RETURNS text\n LANGUAGE sql\n IMMUTABLE STRICT\nAS $function$\nSELECT\n    CASE WHEN strpos(\"name\", '/') > 0 THEN\n             regexp_replace(\"name\", '[\\/]{1}[^\\/]+\\/?$', '')\n         ELSE\n             ''\n        END;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "name": "get_prefixes",
+    "definition": "CREATE OR REPLACE FUNCTION storage.get_prefixes(name text)\n RETURNS text[]\n LANGUAGE plpgsql\n IMMUTABLE STRICT\nAS $function$\nDECLARE\n    parts text[];\n    prefixes text[];\n    prefix text;\nBEGIN\n    -- Split the name into parts by '/'\n    parts := string_to_array(\"name\", '/');\n    prefixes := '{}';\n\n    -- Construct the prefixes, stopping one level below the last part\n    FOR i IN 1..array_length(parts, 1) - 1 LOOP\n            prefix := array_to_string(parts[1:i], '/');\n            prefixes := array_append(prefixes, prefix);\n    END LOOP;\n\n    RETURN prefixes;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "name": "get_size_by_bucket",
+    "definition": "CREATE OR REPLACE FUNCTION storage.get_size_by_bucket()\n RETURNS TABLE(size bigint, bucket_id text)\n LANGUAGE plpgsql\n STABLE\nAS $function$\nBEGIN\n    return query\n        select sum((metadata->>'size')::bigint) as size, obj.bucket_id\n        from \"storage\".objects as obj\n        group by obj.bucket_id;\nEND\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "name": "list_multipart_uploads_with_delimiter",
+    "definition": "CREATE OR REPLACE FUNCTION storage.list_multipart_uploads_with_delimiter(bucket_id text, prefix_param text, delimiter_param text, max_keys integer DEFAULT 100, next_key_token text DEFAULT ''::text, next_upload_token text DEFAULT ''::text)\n RETURNS TABLE(key text, id text, created_at timestamp with time zone)\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n    RETURN QUERY EXECUTE\n        'SELECT DISTINCT ON(key COLLATE \"C\") * from (\n            SELECT\n                CASE\n                    WHEN position($2 IN substring(key from length($1) + 1)) > 0 THEN\n                        substring(key from 1 for length($1) + position($2 IN substring(key from length($1) + 1)))\n                    ELSE\n                        key\n                END AS key, id, created_at\n            FROM\n                storage.s3_multipart_uploads\n            WHERE\n                bucket_id = $5 AND\n                key ILIKE $1 || ''%'' AND\n                CASE\n                    WHEN $4 != '''' AND $6 = '''' THEN\n                        CASE\n                            WHEN position($2 IN substring(key from length($1) + 1)) > 0 THEN\n                                substring(key from 1 for length($1) + position($2 IN substring(key from length($1) + 1))) COLLATE \"C\" > $4\n                            ELSE\n                                key COLLATE \"C\" > $4\n                            END\n                    ELSE\n                        true\n                END AND\n                CASE\n                    WHEN $6 != '''' THEN\n                        id COLLATE \"C\" > $6\n                    ELSE\n                        true\n                    END\n            ORDER BY\n                key COLLATE \"C\" ASC, created_at ASC) as e order by key COLLATE \"C\" LIMIT $3'\n        USING prefix_param, delimiter_param, max_keys, next_key_token, bucket_id, next_upload_token;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "name": "list_objects_with_delimiter",
+    "definition": "CREATE OR REPLACE FUNCTION storage.list_objects_with_delimiter(bucket_id text, prefix_param text, delimiter_param text, max_keys integer DEFAULT 100, start_after text DEFAULT ''::text, next_token text DEFAULT ''::text)\n RETURNS TABLE(name text, id uuid, metadata jsonb, updated_at timestamp with time zone)\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n    RETURN QUERY EXECUTE\n        'SELECT DISTINCT ON(name COLLATE \"C\") * from (\n            SELECT\n                CASE\n                    WHEN position($2 IN substring(name from length($1) + 1)) > 0 THEN\n                        substring(name from 1 for length($1) + position($2 IN substring(name from length($1) + 1)))\n                    ELSE\n                        name\n                END AS name, id, metadata, updated_at\n            FROM\n                storage.objects\n            WHERE\n                bucket_id = $5 AND\n                name ILIKE $1 || ''%'' AND\n                CASE\n                    WHEN $6 != '''' THEN\n                    name COLLATE \"C\" > $6\n                ELSE true END\n                AND CASE\n                    WHEN $4 != '''' THEN\n                        CASE\n                            WHEN position($2 IN substring(name from length($1) + 1)) > 0 THEN\n                                substring(name from 1 for length($1) + position($2 IN substring(name from length($1) + 1))) COLLATE \"C\" > $4\n                            ELSE\n                                name COLLATE \"C\" > $4\n                            END\n                    ELSE\n                        true\n                END\n            ORDER BY\n                name COLLATE \"C\" ASC) as e order by name COLLATE \"C\" LIMIT $3'\n        USING prefix_param, delimiter_param, max_keys, next_token, bucket_id, start_after;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "name": "lock_top_prefixes",
+    "definition": "CREATE OR REPLACE FUNCTION storage.lock_top_prefixes(bucket_ids text[], names text[])\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\nAS $function$\nDECLARE\n    v_bucket text;\n    v_top text;\nBEGIN\n    FOR v_bucket, v_top IN\n        SELECT DISTINCT t.bucket_id,\n            split_part(t.name, '/', 1) AS top\n        FROM unnest(bucket_ids, names) AS t(bucket_id, name)\n        WHERE t.name <> ''\n        ORDER BY 1, 2\n        LOOP\n            PERFORM pg_advisory_xact_lock(hashtextextended(v_bucket || '/' || v_top, 0));\n        END LOOP;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "name": "objects_delete_cleanup",
+    "definition": "CREATE OR REPLACE FUNCTION storage.objects_delete_cleanup()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\nAS $function$\nDECLARE\n    v_bucket_ids text[];\n    v_names      text[];\nBEGIN\n    IF current_setting('storage.gc.prefixes', true) = '1' THEN\n        RETURN NULL;\n    END IF;\n\n    PERFORM set_config('storage.gc.prefixes', '1', true);\n\n    SELECT COALESCE(array_agg(d.bucket_id), '{}'),\n           COALESCE(array_agg(d.name), '{}')\n    INTO v_bucket_ids, v_names\n    FROM deleted AS d\n    WHERE d.name <> '';\n\n    PERFORM storage.lock_top_prefixes(v_bucket_ids, v_names);\n    PERFORM storage.delete_leaf_prefixes(v_bucket_ids, v_names);\n\n    RETURN NULL;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "name": "objects_insert_prefix_trigger",
+    "definition": "CREATE OR REPLACE FUNCTION storage.objects_insert_prefix_trigger()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n    PERFORM \"storage\".\"add_prefixes\"(NEW.\"bucket_id\", NEW.\"name\");\n    NEW.level := \"storage\".\"get_level\"(NEW.\"name\");\n\n    RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "name": "objects_update_cleanup",
+    "definition": "CREATE OR REPLACE FUNCTION storage.objects_update_cleanup()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\nAS $function$\nDECLARE\n    -- NEW - OLD (destinations to create prefixes for)\n    v_add_bucket_ids text[];\n    v_add_names      text[];\n\n    -- OLD - NEW (sources to prune)\n    v_src_bucket_ids text[];\n    v_src_names      text[];\nBEGIN\n    IF TG_OP <> 'UPDATE' THEN\n        RETURN NULL;\n    END IF;\n\n    -- 1) Compute NEW−OLD (added paths) and OLD−NEW (moved-away paths)\n    WITH added AS (\n        SELECT n.bucket_id, n.name\n        FROM new_rows n\n        WHERE n.name <> '' AND position('/' in n.name) > 0\n        EXCEPT\n        SELECT o.bucket_id, o.name FROM old_rows o WHERE o.name <> ''\n    ),\n    moved AS (\n         SELECT o.bucket_id, o.name\n         FROM old_rows o\n         WHERE o.name <> ''\n         EXCEPT\n         SELECT n.bucket_id, n.name FROM new_rows n WHERE n.name <> ''\n    )\n    SELECT\n        -- arrays for ADDED (dest) in stable order\n        COALESCE( (SELECT array_agg(a.bucket_id ORDER BY a.bucket_id, a.name) FROM added a), '{}' ),\n        COALESCE( (SELECT array_agg(a.name      ORDER BY a.bucket_id, a.name) FROM added a), '{}' ),\n        -- arrays for MOVED (src) in stable order\n        COALESCE( (SELECT array_agg(m.bucket_id ORDER BY m.bucket_id, m.name) FROM moved m), '{}' ),\n        COALESCE( (SELECT array_agg(m.name      ORDER BY m.bucket_id, m.name) FROM moved m), '{}' )\n    INTO v_add_bucket_ids, v_add_names, v_src_bucket_ids, v_src_names;\n\n    -- Nothing to do?\n    IF (array_length(v_add_bucket_ids, 1) IS NULL) AND (array_length(v_src_bucket_ids, 1) IS NULL) THEN\n        RETURN NULL;\n    END IF;\n\n    -- 2) Take per-(bucket, top) locks: ALL prefixes in consistent global order to prevent deadlocks\n    DECLARE\n        v_all_bucket_ids text[];\n        v_all_names text[];\n    BEGIN\n        -- Combine source and destination arrays for consistent lock ordering\n        v_all_bucket_ids := COALESCE(v_src_bucket_ids, '{}') || COALESCE(v_add_bucket_ids, '{}');\n        v_all_names := COALESCE(v_src_names, '{}') || COALESCE(v_add_names, '{}');\n\n        -- Single lock call ensures consistent global ordering across all transactions\n        IF array_length(v_all_bucket_ids, 1) IS NOT NULL THEN\n            PERFORM storage.lock_top_prefixes(v_all_bucket_ids, v_all_names);\n        END IF;\n    END;\n\n    -- 3) Create destination prefixes (NEW−OLD) BEFORE pruning sources\n    IF array_length(v_add_bucket_ids, 1) IS NOT NULL THEN\n        WITH candidates AS (\n            SELECT DISTINCT t.bucket_id, unnest(storage.get_prefixes(t.name)) AS name\n            FROM unnest(v_add_bucket_ids, v_add_names) AS t(bucket_id, name)\n            WHERE name <> ''\n        )\n        INSERT INTO storage.prefixes (bucket_id, name)\n        SELECT c.bucket_id, c.name\n        FROM candidates c\n        ON CONFLICT DO NOTHING;\n    END IF;\n\n    -- 4) Prune source prefixes bottom-up for OLD−NEW\n    IF array_length(v_src_bucket_ids, 1) IS NOT NULL THEN\n        -- re-entrancy guard so DELETE on prefixes won't recurse\n        IF current_setting('storage.gc.prefixes', true) <> '1' THEN\n            PERFORM set_config('storage.gc.prefixes', '1', true);\n        END IF;\n\n        PERFORM storage.delete_leaf_prefixes(v_src_bucket_ids, v_src_names);\n    END IF;\n\n    RETURN NULL;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "name": "objects_update_level_trigger",
+    "definition": "CREATE OR REPLACE FUNCTION storage.objects_update_level_trigger()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n    -- Ensure this is an update operation and the name has changed\n    IF TG_OP = 'UPDATE' AND (NEW.\"name\" <> OLD.\"name\" OR NEW.\"bucket_id\" <> OLD.\"bucket_id\") THEN\n        -- Set the new level\n        NEW.\"level\" := \"storage\".\"get_level\"(NEW.\"name\");\n    END IF;\n    RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "name": "objects_update_prefix_trigger",
+    "definition": "CREATE OR REPLACE FUNCTION storage.objects_update_prefix_trigger()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nDECLARE\n    old_prefixes TEXT[];\nBEGIN\n    -- Ensure this is an update operation and the name has changed\n    IF TG_OP = 'UPDATE' AND (NEW.\"name\" <> OLD.\"name\" OR NEW.\"bucket_id\" <> OLD.\"bucket_id\") THEN\n        -- Retrieve old prefixes\n        old_prefixes := \"storage\".\"get_prefixes\"(OLD.\"name\");\n\n        -- Remove old prefixes that are only used by this object\n        WITH all_prefixes as (\n            SELECT unnest(old_prefixes) as prefix\n        ),\n        can_delete_prefixes as (\n             SELECT prefix\n             FROM all_prefixes\n             WHERE NOT EXISTS (\n                 SELECT 1 FROM \"storage\".\"objects\"\n                 WHERE \"bucket_id\" = OLD.\"bucket_id\"\n                   AND \"name\" <> OLD.\"name\"\n                   AND \"name\" LIKE (prefix || '%')\n             )\n         )\n        DELETE FROM \"storage\".\"prefixes\" WHERE name IN (SELECT prefix FROM can_delete_prefixes);\n\n        -- Add new prefixes\n        PERFORM \"storage\".\"add_prefixes\"(NEW.\"bucket_id\", NEW.\"name\");\n    END IF;\n    -- Set the new level\n    NEW.\"level\" := \"storage\".\"get_level\"(NEW.\"name\");\n\n    RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "name": "operation",
+    "definition": "CREATE OR REPLACE FUNCTION storage.operation()\n RETURNS text\n LANGUAGE plpgsql\n STABLE\nAS $function$\nBEGIN\n    RETURN current_setting('storage.operation', true);\nEND;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "name": "prefixes_delete_cleanup",
+    "definition": "CREATE OR REPLACE FUNCTION storage.prefixes_delete_cleanup()\n RETURNS trigger\n LANGUAGE plpgsql\n SECURITY DEFINER\nAS $function$\nDECLARE\n    v_bucket_ids text[];\n    v_names      text[];\nBEGIN\n    IF current_setting('storage.gc.prefixes', true) = '1' THEN\n        RETURN NULL;\n    END IF;\n\n    PERFORM set_config('storage.gc.prefixes', '1', true);\n\n    SELECT COALESCE(array_agg(d.bucket_id), '{}'),\n           COALESCE(array_agg(d.name), '{}')\n    INTO v_bucket_ids, v_names\n    FROM deleted AS d\n    WHERE d.name <> '';\n\n    PERFORM storage.lock_top_prefixes(v_bucket_ids, v_names);\n    PERFORM storage.delete_leaf_prefixes(v_bucket_ids, v_names);\n\n    RETURN NULL;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "name": "prefixes_insert_trigger",
+    "definition": "CREATE OR REPLACE FUNCTION storage.prefixes_insert_trigger()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n    PERFORM \"storage\".\"add_prefixes\"(NEW.\"bucket_id\", NEW.\"name\");\n    RETURN NEW;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "name": "search",
+    "definition": "CREATE OR REPLACE FUNCTION storage.search(prefix text, bucketname text, limits integer DEFAULT 100, levels integer DEFAULT 1, offsets integer DEFAULT 0, search text DEFAULT ''::text, sortcolumn text DEFAULT 'name'::text, sortorder text DEFAULT 'asc'::text)\n RETURNS TABLE(name text, id uuid, updated_at timestamp with time zone, created_at timestamp with time zone, last_accessed_at timestamp with time zone, metadata jsonb)\n LANGUAGE plpgsql\nAS $function$\ndeclare\n    can_bypass_rls BOOLEAN;\nbegin\n    SELECT rolbypassrls\n    INTO can_bypass_rls\n    FROM pg_roles\n    WHERE rolname = coalesce(nullif(current_setting('role', true), 'none'), current_user);\n\n    IF can_bypass_rls THEN\n        RETURN QUERY SELECT * FROM storage.search_v1_optimised(prefix, bucketname, limits, levels, offsets, search, sortcolumn, sortorder);\n    ELSE\n        RETURN QUERY SELECT * FROM storage.search_legacy_v1(prefix, bucketname, limits, levels, offsets, search, sortcolumn, sortorder);\n    END IF;\nend;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "name": "search_legacy_v1",
+    "definition": "CREATE OR REPLACE FUNCTION storage.search_legacy_v1(prefix text, bucketname text, limits integer DEFAULT 100, levels integer DEFAULT 1, offsets integer DEFAULT 0, search text DEFAULT ''::text, sortcolumn text DEFAULT 'name'::text, sortorder text DEFAULT 'asc'::text)\n RETURNS TABLE(name text, id uuid, updated_at timestamp with time zone, created_at timestamp with time zone, last_accessed_at timestamp with time zone, metadata jsonb)\n LANGUAGE plpgsql\n STABLE\nAS $function$\ndeclare\n    v_order_by text;\n    v_sort_order text;\nbegin\n    case\n        when sortcolumn = 'name' then\n            v_order_by = 'name';\n        when sortcolumn = 'updated_at' then\n            v_order_by = 'updated_at';\n        when sortcolumn = 'created_at' then\n            v_order_by = 'created_at';\n        when sortcolumn = 'last_accessed_at' then\n            v_order_by = 'last_accessed_at';\n        else\n            v_order_by = 'name';\n        end case;\n\n    case\n        when sortorder = 'asc' then\n            v_sort_order = 'asc';\n        when sortorder = 'desc' then\n            v_sort_order = 'desc';\n        else\n            v_sort_order = 'asc';\n        end case;\n\n    v_order_by = v_order_by || ' ' || v_sort_order;\n\n    return query execute\n        'with folders as (\n           select path_tokens[$1] as folder\n           from storage.objects\n             where objects.name ilike $2 || $3 || ''%''\n               and bucket_id = $4\n               and array_length(objects.path_tokens, 1) <> $1\n           group by folder\n           order by folder ' || v_sort_order || '\n     )\n     (select folder as \"name\",\n            null as id,\n            null as updated_at,\n            null as created_at,\n            null as last_accessed_at,\n            null as metadata from folders)\n     union all\n     (select path_tokens[$1] as \"name\",\n            id,\n            updated_at,\n            created_at,\n            last_accessed_at,\n            metadata\n     from storage.objects\n     where objects.name ilike $2 || $3 || ''%''\n       and bucket_id = $4\n       and array_length(objects.path_tokens, 1) = $1\n     order by ' || v_order_by || ')\n     limit $5\n     offset $6' using levels, prefix, search, bucketname, limits, offsets;\nend;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "name": "search_v1_optimised",
+    "definition": "CREATE OR REPLACE FUNCTION storage.search_v1_optimised(prefix text, bucketname text, limits integer DEFAULT 100, levels integer DEFAULT 1, offsets integer DEFAULT 0, search text DEFAULT ''::text, sortcolumn text DEFAULT 'name'::text, sortorder text DEFAULT 'asc'::text)\n RETURNS TABLE(name text, id uuid, updated_at timestamp with time zone, created_at timestamp with time zone, last_accessed_at timestamp with time zone, metadata jsonb)\n LANGUAGE plpgsql\n STABLE\nAS $function$\ndeclare\n    v_order_by text;\n    v_sort_order text;\nbegin\n    case\n        when sortcolumn = 'name' then\n            v_order_by = 'name';\n        when sortcolumn = 'updated_at' then\n            v_order_by = 'updated_at';\n        when sortcolumn = 'created_at' then\n            v_order_by = 'created_at';\n        when sortcolumn = 'last_accessed_at' then\n            v_order_by = 'last_accessed_at';\n        else\n            v_order_by = 'name';\n        end case;\n\n    case\n        when sortorder = 'asc' then\n            v_sort_order = 'asc';\n        when sortorder = 'desc' then\n            v_sort_order = 'desc';\n        else\n            v_sort_order = 'asc';\n        end case;\n\n    v_order_by = v_order_by || ' ' || v_sort_order;\n\n    return query execute\n        'with folders as (\n           select (string_to_array(name, ''/''))[level] as name\n           from storage.prefixes\n             where lower(prefixes.name) like lower($2 || $3) || ''%''\n               and bucket_id = $4\n               and level = $1\n           order by name ' || v_sort_order || '\n     )\n     (select name,\n            null as id,\n            null as updated_at,\n            null as created_at,\n            null as last_accessed_at,\n            null as metadata from folders)\n     union all\n     (select path_tokens[level] as \"name\",\n            id,\n            updated_at,\n            created_at,\n            last_accessed_at,\n            metadata\n     from storage.objects\n     where lower(objects.name) like lower($2 || $3) || ''%''\n       and bucket_id = $4\n       and level = $1\n     order by ' || v_order_by || ')\n     limit $5\n     offset $6' using levels, prefix, search, bucketname, limits, offsets;\nend;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "name": "search_v2",
+    "definition": "CREATE OR REPLACE FUNCTION storage.search_v2(prefix text, bucket_name text, limits integer DEFAULT 100, levels integer DEFAULT 1, start_after text DEFAULT ''::text, sort_order text DEFAULT 'asc'::text, sort_column text DEFAULT 'name'::text, sort_column_after text DEFAULT ''::text)\n RETURNS TABLE(key text, name text, id uuid, updated_at timestamp with time zone, created_at timestamp with time zone, last_accessed_at timestamp with time zone, metadata jsonb)\n LANGUAGE plpgsql\n STABLE\nAS $function$\nDECLARE\n    sort_col text;\n    sort_ord text;\n    cursor_op text;\n    cursor_expr text;\n    sort_expr text;\nBEGIN\n    -- Validate sort_order\n    sort_ord := lower(sort_order);\n    IF sort_ord NOT IN ('asc', 'desc') THEN\n        sort_ord := 'asc';\n    END IF;\n\n    -- Determine cursor comparison operator\n    IF sort_ord = 'asc' THEN\n        cursor_op := '>';\n    ELSE\n        cursor_op := '<';\n    END IF;\n    \n    sort_col := lower(sort_column);\n    -- Validate sort column  \n    IF sort_col IN ('updated_at', 'created_at') THEN\n        cursor_expr := format(\n            '($5 = '''' OR ROW(date_trunc(''milliseconds'', %I), name COLLATE \"C\") %s ROW(COALESCE(NULLIF($6, '''')::timestamptz, ''epoch''::timestamptz), $5))',\n            sort_col, cursor_op\n        );\n        sort_expr := format(\n            'COALESCE(date_trunc(''milliseconds'', %I), ''epoch''::timestamptz) %s, name COLLATE \"C\" %s',\n            sort_col, sort_ord, sort_ord\n        );\n    ELSE\n        cursor_expr := format('($5 = '''' OR name COLLATE \"C\" %s $5)', cursor_op);\n        sort_expr := format('name COLLATE \"C\" %s', sort_ord);\n    END IF;\n\n    RETURN QUERY EXECUTE format(\n        $sql$\n        SELECT * FROM (\n            (\n                SELECT\n                    split_part(name, '/', $4) AS key,\n                    name,\n                    NULL::uuid AS id,\n                    updated_at,\n                    created_at,\n                    NULL::timestamptz AS last_accessed_at,\n                    NULL::jsonb AS metadata\n                FROM storage.prefixes\n                WHERE name COLLATE \"C\" LIKE $1 || '%%'\n                    AND bucket_id = $2\n                    AND level = $4\n                    AND %s\n                ORDER BY %s\n                LIMIT $3\n            )\n            UNION ALL\n            (\n                SELECT\n                    split_part(name, '/', $4) AS key,\n                    name,\n                    id,\n                    updated_at,\n                    created_at,\n                    last_accessed_at,\n                    metadata\n                FROM storage.objects\n                WHERE name COLLATE \"C\" LIKE $1 || '%%'\n                    AND bucket_id = $2\n                    AND level = $4\n                    AND %s\n                ORDER BY %s\n                LIMIT $3\n            )\n        ) obj\n        ORDER BY %s\n        LIMIT $3\n        $sql$,\n        cursor_expr,    -- prefixes WHERE\n        sort_expr,      -- prefixes ORDER BY\n        cursor_expr,    -- objects WHERE\n        sort_expr,      -- objects ORDER BY\n        sort_expr       -- final ORDER BY\n    )\n    USING prefix, bucket_name, limits, levels, start_after, sort_column_after;\nEND;\n$function$\n"
+  },
+  {
+    "schema": "storage",
+    "name": "update_updated_at_column",
+    "definition": "CREATE OR REPLACE FUNCTION storage.update_updated_at_column()\n RETURNS trigger\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n    NEW.updated_at = now();\n    RETURN NEW; \nEND;\n$function$\n"
+  }
+]
